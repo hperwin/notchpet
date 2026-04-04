@@ -173,6 +173,12 @@ final class PetState: Codable {
     var lastActiveTime: Date?
     var sessionActiveMinutes: Int = 0
 
+    // Pet selection
+    var selectedPet: String = "leafeon"  // pokemon id
+    var useShiny: Bool = false
+    var unlockedShinies: [String] = []   // pokemon ids with shiny unlocked
+    var foodEaten: Int = 0
+
     // Mutation
     var mutationColor: String?      // hex color, nil = normal
 

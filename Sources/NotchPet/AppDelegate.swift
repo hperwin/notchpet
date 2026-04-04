@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyboardMonitor: KeyboardMonitor!
     private var gameSystems: GameSystems!
     private var petState: PetState!
+    private var foodSpawner: FoodSpawner!
     private var tickTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -24,29 +25,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Pet window
         petWindow = PetWindow()
 
-        // Set up running bounds — pet can run across the full window width
+        // Set up running bounds
         let petView = petWindow.petView
         let windowWidth = petWindow.frame.width
         petView.minRunX = 0
         petView.maxRunX = windowWidth - PetWindow.petSize
-        // Home position: just to the left of the notch
         petView.homeX = PetWindow.notchLeftOffset - PetWindow.petSize - 4
         petView.setPetLocalX(petView.homeX)
 
-        // Apply saved animation speed
-        petWindow.petView.setAnimationSpeed(Preferences.shared.animationSpeed)
-
-        // Apply evolution stage visual
-        updatePetVisuals()
+        // Show selected Pokemon sprite
+        loadSelectedPet()
 
         // Panel window
         panelWindow = PanelWindow(contentRect: .zero)
         panelWindow.onPrestige = { [weak self] in
             self?.handlePrestige()
         }
+        panelWindow.onPetSelected = { [weak self] petId, shiny in
+            self?.selectPet(petId, shiny: shiny)
+        }
         panelWindow.refreshData(petState)
 
-        // Interaction handler — click opens panel instead of squish
+        // Interaction handler
         petInteraction = PetInteraction(
             window: petWindow,
             petView: petWindow.petView,
@@ -57,14 +57,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApplication.shared.terminate(nil)
             }
         )
-        // Override click to toggle panel
         petInteraction.onClickAction = { [weak self] in
             self?.togglePanel()
         }
         petWindow.petView.interaction = petInteraction
 
-        // Walk controller
-        walkController = WalkController(window: petWindow, interaction: petInteraction)
+        // Walk controller (disabled)
+        walkController = WalkController()
+
+        // Food spawner — berries appear to the right of the notch
+        foodSpawner = FoodSpawner(petWindowFrame: { [weak self] in
+            // Return the frame of just the pet sprite in screen coordinates
+            guard let self = self else { return .zero }
+            let petView = self.petWindow.petView
+            let localPetFrame = petView.imageView.frame
+            let windowOrigin = self.petWindow.frame.origin
+            return NSRect(
+                x: windowOrigin.x + localPetFrame.origin.x,
+                y: windowOrigin.y + localPetFrame.origin.y,
+                width: localPetFrame.width,
+                height: localPetFrame.height
+            )
+        })
+        foodSpawner.onFoodEaten = { [weak self] berryName in
+            self?.handleFoodEaten(berryName)
+        }
+        foodSpawner.start()
 
         // Keyboard monitor
         keyboardMonitor = KeyboardMonitor()
@@ -85,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         keyboardMonitor.start()
 
-        // Tick timer — every 60 seconds for session tracking + rest XP
+        // Tick timer
         tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.gameSystems.tick()
         }
@@ -99,10 +117,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow.orderFront(nil)
     }
 
+    // MARK: - Pet Selection
+
+    private func loadSelectedPet() {
+        petWindow.petView.setPokemonSprite(petState.selectedPet, shiny: petState.useShiny)
+    }
+
+    private func selectPet(_ id: String, shiny: Bool) {
+        petState.selectedPet = id
+        petState.useShiny = shiny
+        petState.save()
+        petWindow.petView.setPokemonSprite(id, shiny: shiny)
+        updatePetVisuals()
+    }
+
+    // MARK: - Food
+
+    private func handleFoodEaten(_ berryName: String) {
+        petState.foodEaten += 1
+
+        // Give XP for feeding (15-30 XP per berry)
+        let baseXP = Int.random(in: 15...30)
+        let totalXP = Int(Double(baseXP) * petState.totalMultiplier)
+        petState.xp += totalXP
+        petState.totalXPEarned += totalXP
+        petState.save()
+
+        // Play eat animation
+        petWindow.petView.playEatAnimation()
+
+        // Check for level up etc
+        gameSystems.checkAfterXPGain()
+
+        // 3% chance to unlock a shiny on feeding
+        if petState.unlockedShinies.count < PetCollection.allPokemon.count {
+            if Double.random(in: 0...1) < 0.03 {
+                let candidates = PetCollection.unlockedPets(for: petState.level)
+                    .filter { !petState.unlockedShinies.contains($0.id) && $0.hasShiny }
+                if let pick = candidates.randomElement() {
+                    petState.unlockedShinies.append(pick.id)
+                    petState.save()
+                    NSLog("NotchPet: Shiny unlocked: \(pick.displayName)!")
+                    animatePetCelebration()
+                }
+            }
+        }
+
+        // Refresh panel if open
+        if panelWindow.isOpen {
+            panelWindow.refreshData(petState)
+        }
+    }
+
     // MARK: - Panel
 
     private func togglePanel() {
-        // Refresh data before showing
         if !panelWindow.isOpen {
             panelWindow.refreshData(petState)
         }
@@ -114,7 +183,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleGameEvent(_ event: GameSystems.GameEvent) {
         switch event {
         case .levelUp(let level):
-            // Flash the pet
             animatePetCelebration()
             updatePetVisuals()
             NSLog("NotchPet: Level up! Now level \(level)")
@@ -147,7 +215,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("NotchPet: Typing streak: \(streak) days")
         }
 
-        // Refresh panel if open
         if panelWindow.isOpen {
             panelWindow.refreshData(petState)
         }
@@ -159,7 +226,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let petView = petWindow.petView
         switch state {
         case .idle:
-            // Gentle pulse to remind user — focus alert
             let pulse = CABasicAnimation(keyPath: "opacity")
             pulse.fromValue = 1.0
             pulse.toValue = 0.5
@@ -172,9 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             petView.imageView.layer?.removeAnimation(forKey: "focusAlert")
 
         case .fast:
-            // Pet dances — more energetic wiggle
             let dance = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-            let angle = CGFloat.pi / 30 // ~6 degrees
+            let angle = CGFloat.pi / 30
             dance.values = [0, angle, 0, -angle, 0]
             dance.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
             dance.duration = 0.5
@@ -182,7 +247,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             petView.imageView.layer?.add(dance, forKey: "typingDance")
 
         case .burst:
-            // Pet goes wild — rapid bouncing + rotation
             let bounce = CAKeyframeAnimation(keyPath: "transform.scale")
             bounce.values = [1.0, 1.15, 1.0, 1.1, 1.0]
             bounce.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
@@ -206,11 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let stage = petState.evolutionStage
         let petView = petWindow.petView
 
-        // Update sprite scale based on evolution
         let scale = stage.spriteScale
         petView.imageView.layer?.transform = CATransform3DMakeScale(scale, scale, 1)
 
-        // Glow effect
         if let glow = stage.glowColor {
             petView.imageView.layer?.shadowColor = CGColor(
                 red: glow.r, green: glow.g, blue: glow.b, alpha: 1.0
@@ -222,7 +284,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             petView.imageView.layer?.shadowOpacity = 0
         }
 
-        // Mutation tint
         if let hexColor = petState.mutationColor {
             let tint = colorFromHex(hexColor)
             petView.imageView.contentTintColor = tint
@@ -231,8 +292,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func animatePetCelebration() {
         let petView = petWindow.petView
-
-        // Quick scale-up bounce
         let celebrate = CAKeyframeAnimation(keyPath: "transform.scale")
         celebrate.values = [1.0, 1.3, 0.9, 1.1, 1.0]
         celebrate.keyTimes = [0, 0.2, 0.5, 0.8, 1.0]
@@ -271,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         keyboardMonitor.stop()
         walkController.stop()
+        foodSpawner.stop()
         tickTimer?.invalidate()
         petState.save()
     }

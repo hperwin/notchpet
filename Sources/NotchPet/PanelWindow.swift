@@ -8,6 +8,8 @@ final class PanelWindow: NSWindow {
     // Public API
     var isOpen: Bool = false
     var onPrestige: (() -> Void)?
+    /// Called when user selects a pet from the picker: (pokemonId, isShiny)
+    var onPetSelected: ((String, Bool) -> Void)?
 
     // Layout constants
     private let panelWidth: CGFloat = 320

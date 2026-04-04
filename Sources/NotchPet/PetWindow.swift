@@ -1,7 +1,7 @@
 import AppKit
 
 final class PetWindow: NSWindow {
-    static let petSize: CGFloat = 32
+    static let petSize: CGFloat = 22
     static let notchCornerRadius: CGFloat = 8.0
     /// Extra width beyond the notch on each side for the pet to run around
     static let runPadding: CGFloat = 60

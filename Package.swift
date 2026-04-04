@@ -9,7 +9,9 @@ let package = Package(
             name: "NotchPet",
             resources: [
                 .copy("Resources/blob.png"),
-                .copy("Resources/frames")
+                .copy("Resources/frames"),
+                .copy("Resources/pokemon"),
+                .copy("Resources/berries")
             ]
         ),
         // .testTarget(

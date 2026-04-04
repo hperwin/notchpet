@@ -243,6 +243,12 @@ final class GameSystems {
         state.save()
     }
 
+    /// Called externally after XP is added directly (e.g., from feeding)
+    func checkAfterXPGain() {
+        checkLevelUp()
+        checkAchievements()
+    }
+
     // MARK: - Private
 
     private func checkLevelUp() {

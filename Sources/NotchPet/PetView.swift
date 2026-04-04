@@ -9,7 +9,9 @@ final class PetView: NSView {
     private var frames: [NSImage] = []
     private var currentFrameIndex = 0
     private var frameTimer: Timer?
+    private var idleTimer: Timer?
     private let frameRate: TimeInterval = 1.0 / 15.0  // 15fps
+    private var isAnimating = false
 
     // Running state
     enum PetDirection {
@@ -87,21 +89,64 @@ final class PetView: NSView {
         NSLog("NotchPet: loaded \(frames.count) animation frames")
     }
 
-    // MARK: - Frame Animation
+    // MARK: - Frame Animation (idle/burst cycle)
 
-    func startFrameAnimation() {
-        frameTimer?.invalidate()
-        guard frames.count > 1 else { return }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: frameRate, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            self.currentFrameIndex = (self.currentFrameIndex + 1) % self.frames.count
-            self.imageView.image = self.frames[self.currentFrameIndex]
+    /// Start the idle/burst cycle: sit still for a few seconds, play one animation loop, repeat.
+    func startIdleCycle() {
+        stopAllAnimations()
+        // Show first frame (standing still)
+        if !frames.isEmpty {
+            imageView.image = frames[0]
+        }
+        scheduleNextBurst()
+    }
+
+    private func scheduleNextBurst() {
+        idleTimer?.invalidate()
+        // Wait 4-8 seconds before doing the next animation burst
+        let wait = Double.random(in: 4.0...8.0)
+        idleTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
+            self?.playOneBurst()
         }
     }
 
+    /// Play the animation frames once through, then return to idle.
+    private func playOneBurst() {
+        guard frames.count > 1 else { return }
+        isAnimating = true
+        currentFrameIndex = 0
+
+        frameTimer?.invalidate()
+        frameTimer = Timer.scheduledTimer(withTimeInterval: frameRate, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.currentFrameIndex += 1
+            if self.currentFrameIndex >= self.frames.count {
+                // Done — back to idle
+                self.frameTimer?.invalidate()
+                self.frameTimer = nil
+                self.isAnimating = false
+                self.imageView.image = self.frames[0]
+                self.scheduleNextBurst()
+            } else {
+                self.imageView.image = self.frames[self.currentFrameIndex]
+            }
+        }
+    }
+
+    func startFrameAnimation() {
+        startIdleCycle()
+    }
+
     func stopFrameAnimation() {
+        stopAllAnimations()
+    }
+
+    private func stopAllAnimations() {
         frameTimer?.invalidate()
         frameTimer = nil
+        idleTimer?.invalidate()
+        idleTimer = nil
+        isAnimating = false
     }
 
     // MARK: - Position & Direction
@@ -169,6 +214,41 @@ final class PetView: NSView {
         startRunning(to: homeX)
     }
 
+    // MARK: - Pokemon sprite mode
+
+    /// Switch to displaying a static Pokemon sprite instead of animation frames
+    func setPokemonSprite(_ id: String, shiny: Bool = false) {
+        stopAllAnimations()
+        if let img = PetCollection.spriteImage(for: id, shiny: shiny) {
+            imageView.image = img
+        }
+        // Start a gentle idle bounce for the static sprite
+        startStaticIdleAnimation()
+    }
+
+    private func startStaticIdleAnimation() {
+        // Subtle breathing effect for static sprites
+        let breathe = CABasicAnimation(keyPath: "transform.scale")
+        breathe.fromValue = 1.0
+        breathe.toValue = 1.04
+        breathe.duration = 2.5
+        breathe.autoreverses = true
+        breathe.repeatCount = .infinity
+        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        imageView.layer?.add(breathe, forKey: "breathe")
+    }
+
+    // MARK: - Eating animation
+
+    func playEatAnimation() {
+        // Quick chomp: scale up, squish, bounce back
+        let eat = CAKeyframeAnimation(keyPath: "transform.scale")
+        eat.values = [1.0, 1.2, 0.85, 1.05, 1.0]
+        eat.keyTimes = [0, 0.2, 0.5, 0.8, 1.0]
+        eat.duration = 0.4
+        imageView.layer?.add(eat, forKey: "eat")
+    }
+
     // MARK: - Legacy animation support
 
     func squish() {
@@ -180,19 +260,8 @@ final class PetView: NSView {
     }
 
     func setAnimationSpeed(_ speed: AnimationSpeed) {
-        // Adjust frame rate based on speed
-        stopFrameAnimation()
-        let rate: TimeInterval
-        switch speed {
-        case .slow: rate = 1.0 / 10.0
-        case .normal: rate = 1.0 / 15.0
-        case .fast: rate = 1.0 / 22.0
-        }
-        frameTimer = Timer.scheduledTimer(withTimeInterval: rate, repeats: true) { [weak self] _ in
-            guard let self = self, !self.frames.isEmpty else { return }
-            self.currentFrameIndex = (self.currentFrameIndex + 1) % self.frames.count
-            self.imageView.image = self.frames[self.currentFrameIndex]
-        }
+        // Just restart the idle cycle — frameRate is fixed, but we could adjust later
+        startIdleCycle()
     }
 
     // MARK: - Mouse event forwarding
