@@ -4,7 +4,6 @@ final class WalkController {
     private weak var window: PetWindow?
     private weak var interaction: PetInteraction?
     private var walkTimer: Timer?
-    private var isWalking = false
 
     init(window: PetWindow, interaction: PetInteraction) {
         self.window = window
@@ -20,63 +19,46 @@ final class WalkController {
     }
 
     private func attemptWalk() {
-        guard !isWalking else {
+        guard let window = window else {
             scheduleNextWalk()
             return
         }
 
-        // Skip if user dragged within last 60 seconds
-        if let interaction = interaction {
-            let timeSinceDrag = Date().timeIntervalSince(interaction.lastDragTime)
-            if timeSinceDrag < 60 {
-                scheduleNextWalk()
-                return
-            }
+        let petView = window.petView
+
+        // Skip if already running or user dragged recently
+        if petView.isRunning {
+            scheduleNextWalk()
+            return
         }
-
-        performWalk()
-    }
-
-    private func performWalk() {
-        guard window != nil else {
+        if let interaction = interaction,
+           Date().timeIntervalSince(interaction.lastDragTime) < 60 {
             scheduleNextWalk()
             return
         }
 
-        isWalking = true
-        let distance = CGFloat.random(in: 30...50) * (Bool.random() ? 1 : -1)
-        let steps = 20
-        let stepDistance = distance / CGFloat(steps)
-        let stepDuration: TimeInterval = 0.1 // 20 steps over ~2 seconds
-        var currentStep = 0
+        // Pick a random target within run bounds
+        let currentX = petView.petLocalX
+        let distance = CGFloat.random(in: 40...80)
+        let direction: CGFloat = Bool.random() ? 1 : -1
+        var targetX = currentX + distance * direction
 
-        Timer.scheduledTimer(withTimeInterval: stepDuration, repeats: true) { [weak self] timer in
-            guard let self = self, let window = self.window else {
-                timer.invalidate()
-                return
-            }
+        // Clamp to bounds
+        targetX = max(petView.minRunX, min(targetX, petView.maxRunX))
 
-            currentStep += 1
+        // If target is same as current (at edge), go the other way
+        if abs(targetX - currentX) < 10 {
+            targetX = currentX - distance * direction
+            targetX = max(petView.minRunX, min(targetX, petView.maxRunX))
+        }
 
-            // Move
-            let screen = NSScreen.main ?? NSScreen.screens[0]
-            let newX = window.frame.origin.x + stepDistance
-            let clampedX = max(screen.frame.minX, min(newX, screen.frame.maxX - window.frame.width))
-            window.setXPosition(clampedX)
+        petView.startRunning(to: targetX)
 
-            // Waddle: alternate tilt
-            let tiltAngle: CGFloat = (currentStep % 2 == 0) ? 0.05 : -0.05
-            window.contentView?.layer?.setAffineTransform(CGAffineTransform(rotationAngle: tiltAngle))
-
-            if currentStep >= steps {
-                timer.invalidate()
-                // Reset tilt
-                window.contentView?.layer?.setAffineTransform(.identity)
-                // Save position
-                Preferences.shared.savedWindowX = window.frame.origin.x
-                self.isWalking = false
-                self.scheduleNextWalk()
-            }
+        // After a bit, run back home
+        let runDuration = Double(abs(targetX - currentX)) / 1.5 / 60.0 + 2.0
+        Timer.scheduledTimer(withTimeInterval: runDuration, repeats: false) { [weak self] _ in
+            petView.returnHome()
+            self?.scheduleNextWalk()
         }
     }
 

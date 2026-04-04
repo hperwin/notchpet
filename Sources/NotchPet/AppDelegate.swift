@@ -24,10 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Pet window
         petWindow = PetWindow()
 
-        // Restore saved position
-        if let savedX = Preferences.shared.savedWindowX {
-            petWindow.setXPosition(savedX)
-        }
+        // Set up running bounds — pet can run across the full window width
+        let petView = petWindow.petView
+        let windowWidth = petWindow.frame.width
+        petView.minRunX = 0
+        petView.maxRunX = windowWidth - PetWindow.petSize
+        // Home position: just to the left of the notch
+        petView.homeX = PetWindow.notchLeftOffset - PetWindow.petSize - 4
+        petView.setPetLocalX(petView.homeX)
 
         // Apply saved animation speed
         petWindow.petView.setAnimationSpeed(Preferences.shared.animationSpeed)
@@ -249,9 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Helpers
 
     private func resetPosition() {
-        let frame = PetWindow.calculateDefaultFrame()
-        petWindow.setXPosition(frame.origin.x)
-        Preferences.shared.savedWindowX = nil
+        petWindow.petView.setPetLocalX(petWindow.petView.homeX)
     }
 
     private func colorFromHex(_ hex: String) -> NSColor {

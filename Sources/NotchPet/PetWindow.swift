@@ -1,11 +1,10 @@
 import AppKit
 
 final class PetWindow: NSWindow {
-    static let petSize: CGFloat = 28
-    /// Notch corner radius — matches Apple's hardware notch rounding
+    static let petSize: CGFloat = 32
     static let notchCornerRadius: CGFloat = 8.0
-    /// How wide the black extension should be (pet + padding)
-    static let extensionWidth: CGFloat = 50
+    /// Extra width beyond the notch on each side for the pet to run around
+    static let runPadding: CGFloat = 60
 
     let petView: PetView
 
@@ -29,28 +28,42 @@ final class PetWindow: NSWindow {
         contentView = petView
     }
 
-    /// Position the window just to the LEFT of the notch.
-    /// The window is a small black extension that looks like it's part of the notch.
-    /// The right edge matches the notch's left edge, with rounded bottom-left corner.
+    /// Window spans from (notchLeft - runPadding) to (notchRight + runPadding)
+    /// giving the pet room to run left and right around the notch area.
     static func calculateDefaultFrame() -> NSRect {
         let screen = NSScreen.main ?? NSScreen.screens[0]
 
         if let auxLeft = screen.auxiliaryTopLeftArea,
-           let _ = screen.auxiliaryTopRightArea {
-            // auxLeft's right edge = notch's left edge
-            let notchLeftEdge = auxLeft.origin.x + auxLeft.width
+           let auxRight = screen.auxiliaryTopRightArea {
+            let notchLeft = auxLeft.origin.x + auxLeft.width
+            let notchRight = auxRight.origin.x
             let menuBarHeight = auxLeft.height
-            let x = notchLeftEdge - extensionWidth
+            let x = notchLeft - runPadding
+            let width = (notchRight - notchLeft) + runPadding * 2
             let y = screen.frame.maxY - menuBarHeight
-            return NSRect(x: x, y: y, width: extensionWidth, height: menuBarHeight)
+            return NSRect(x: x, y: y, width: width, height: menuBarHeight)
         }
 
-        // Fallback for non-notch Macs
+        // Fallback
         let notchWidth: CGFloat = 185
-        let notchLeftEdge = (screen.frame.width - notchWidth) / 2
-        let x = notchLeftEdge - extensionWidth
+        let notchLeft = (screen.frame.width - notchWidth) / 2
+        let x = notchLeft - runPadding
+        let width = notchWidth + runPadding * 2
         let y = screen.frame.maxY - 32
-        return NSRect(x: x, y: y, width: extensionWidth, height: 32)
+        return NSRect(x: x, y: y, width: width, height: 32)
+    }
+
+    /// The x-offset within the window where the notch left edge is
+    static var notchLeftOffset: CGFloat { runPadding }
+    /// The x-offset within the window where the notch right edge is
+    static var notchRightOffset: CGFloat {
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        if let auxLeft = screen.auxiliaryTopLeftArea,
+           let auxRight = screen.auxiliaryTopRightArea {
+            let notchWidth = auxRight.origin.x - (auxLeft.origin.x + auxLeft.width)
+            return runPadding + notchWidth
+        }
+        return runPadding + 185
     }
 
     func setXPosition(_ x: CGFloat) {

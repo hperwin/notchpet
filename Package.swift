@@ -8,7 +8,8 @@ let package = Package(
         .executableTarget(
             name: "NotchPet",
             resources: [
-                .copy("Resources/blob.png")
+                .copy("Resources/blob.png"),
+                .copy("Resources/frames")
             ]
         ),
         // .testTarget(

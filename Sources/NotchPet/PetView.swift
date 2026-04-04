@@ -4,8 +4,30 @@ import QuartzCore
 final class PetView: NSView {
     let imageView = NSImageView()
     weak var interaction: PetInteraction?
-    private var blinkTimer: Timer?
-    private var animationSpeed: AnimationSpeed = Preferences.shared.animationSpeed
+
+    // Frame animation
+    private var frames: [NSImage] = []
+    private var currentFrameIndex = 0
+    private var frameTimer: Timer?
+    private let frameRate: TimeInterval = 1.0 / 15.0  // 15fps
+
+    // Running state
+    enum PetDirection {
+        case left, right
+    }
+    private(set) var direction: PetDirection = .right
+    private(set) var isRunning = false
+    private var runTimer: Timer?
+    /// The pet's x position within the window (local coordinate)
+    private(set) var petLocalX: CGFloat = 0
+    private var runTarget: CGFloat = 0
+
+    // Running bounds (set by AppDelegate after init)
+    var minRunX: CGFloat = 0
+    var maxRunX: CGFloat = 100
+
+    // Home position (where the pet idles, left of notch)
+    var homeX: CGFloat = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -21,166 +43,156 @@ final class PetView: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
 
-        guard let image = loadAndProcessImage() else {
-            NSLog("NotchPet: Failed to load blob.png")
+        loadFrames()
+
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.wantsLayer = true
+        imageView.image = frames.first
+        addSubview(imageView)
+
+        // Position imageView — will be moved by updatePetPosition()
+        let size = PetWindow.petSize
+        imageView.frame = NSRect(x: 0, y: (bounds.height - size) / 2, width: size, height: size)
+
+        startFrameAnimation()
+    }
+
+    override func layout() {
+        super.layout()
+        updatePetPosition()
+    }
+
+    // MARK: - Frame Loading
+
+    private func loadFrames() {
+        guard let framesURL = Bundle.module.url(forResource: "frames", withExtension: nil) else {
+            NSLog("NotchPet: frames directory not found, falling back to blob.png")
+            if let blobURL = Bundle.module.url(forResource: "blob", withExtension: "png"),
+               let img = NSImage(contentsOf: blobURL) {
+                frames = [img]
+            }
             return
         }
 
-        imageView.image = image
-        imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.wantsLayer = true
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(imageView)
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: framesURL, includingPropertiesForKeys: nil)
+            .filter({ $0.pathExtension == "png" })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+        else {
+            NSLog("NotchPet: couldn't list frames")
+            return
+        }
 
-        let petSize: CGFloat = PetWindow.petSize
-        NSLayoutConstraint.activate([
-            imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            imageView.widthAnchor.constraint(equalToConstant: petSize),
-            imageView.heightAnchor.constraint(equalToConstant: petSize),
-        ])
-
-        startIdleAnimations()
+        frames = files.compactMap { NSImage(contentsOf: $0) }
+        NSLog("NotchPet: loaded \(frames.count) animation frames")
     }
 
-    override var wantsUpdateLayer: Bool { true }
+    // MARK: - Frame Animation
 
-    override func updateLayer() {
-        // Draw the shaped black background: top edge and right edge are straight
-        // (flush with notch), bottom-left corner is rounded to match notch radius
-        let radius = PetWindow.notchCornerRadius
-        let rect = bounds
-
-        let path = CGMutablePath()
-        // Start at top-left
-        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        // Top edge → top-right (straight, flush with notch top)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        // Right edge → bottom-right (straight, flush with notch side)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        // Bottom edge → bottom-left with rounded corner
-        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.minY))
-        path.addArc(center: CGPoint(x: rect.minX + radius, y: rect.minY + radius),
-                     radius: radius,
-                     startAngle: -.pi / 2,
-                     endAngle: .pi,
-                     clockwise: true)
-        // Left edge → back to top-left
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-
-        let shape = CAShapeLayer()
-        shape.path = path
-        shape.fillColor = NSColor.black.cgColor
-
-        // Remove old background shape if any
-        layer?.sublayers?.filter { $0.name == "bg" }.forEach { $0.removeFromSuperlayer() }
-        shape.name = "bg"
-        layer?.insertSublayer(shape, at: 0)
+    func startFrameAnimation() {
+        frameTimer?.invalidate()
+        guard frames.count > 1 else { return }
+        frameTimer = Timer.scheduledTimer(withTimeInterval: frameRate, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.currentFrameIndex = (self.currentFrameIndex + 1) % self.frames.count
+            self.imageView.image = self.frames[self.currentFrameIndex]
+        }
     }
 
-    private func loadAndProcessImage() -> NSImage? {
-        guard let url = Bundle.module.url(forResource: "blob", withExtension: "png"),
-              let nsImage = NSImage(contentsOf: url),
-              let tiffData = nsImage.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let cgImage = bitmap.cgImage
-        else { return nil }
+    func stopFrameAnimation() {
+        frameTimer?.invalidate()
+        frameTimer = nil
+    }
 
-        let width = cgImage.width
-        let height = cgImage.height
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bytesPerPixel = 4
-        let bytesPerRow = bytesPerPixel * width
-        var pixelData = [UInt8](repeating: 0, count: height * bytesPerRow)
+    // MARK: - Position & Direction
 
-        guard let context = CGContext(
-            data: &pixelData,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
+    private func updatePetPosition() {
+        let size = PetWindow.petSize
+        let y = (bounds.height - size) / 2
+        imageView.frame = NSRect(x: petLocalX, y: y, width: size, height: size)
+    }
 
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+    func setPetLocalX(_ x: CGFloat) {
+        petLocalX = x
+        updatePetPosition()
+    }
 
-        // Make near-white pixels transparent (threshold: RGB all > 220)
-        let threshold: UInt8 = 220
-        for i in stride(from: 0, to: pixelData.count, by: bytesPerPixel) {
-            let r = pixelData[i]
-            let g = pixelData[i + 1]
-            let b = pixelData[i + 2]
-            if r > threshold && g > threshold && b > threshold {
-                pixelData[i] = 0     // R
-                pixelData[i + 1] = 0 // G
-                pixelData[i + 2] = 0 // B
-                pixelData[i + 3] = 0 // A
+    func setDirection(_ dir: PetDirection) {
+        direction = dir
+        if dir == .left {
+            // Flip horizontally
+            imageView.layer?.setAffineTransform(CGAffineTransform(scaleX: -1, y: 1))
+        } else {
+            imageView.layer?.setAffineTransform(.identity)
+        }
+    }
+
+    // MARK: - Running
+
+    func startRunning(to targetX: CGFloat) {
+        guard !isRunning else { return }
+        isRunning = true
+        runTarget = targetX
+
+        // Set direction based on target
+        if targetX > petLocalX {
+            setDirection(.right)
+        } else {
+            setDirection(.left)
+        }
+
+        let speed: CGFloat = 1.5 // points per tick
+        runTimer = Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+
+            let dx = self.runTarget - self.petLocalX
+            if abs(dx) < speed {
+                self.petLocalX = self.runTarget
+                self.updatePetPosition()
+                self.stopRunning()
+                return
             }
-        }
 
-        guard let processedCGImage = context.makeImage() else { return nil }
-        return NSImage(cgImage: processedCGImage, size: NSSize(width: width, height: height))
-    }
-
-    func startIdleAnimations() {
-        imageView.layer?.removeAllAnimations()
-        blinkTimer?.invalidate()
-
-        let speed = animationSpeed.multiplier
-
-        // Breathing
-        let breathe = CABasicAnimation(keyPath: "transform.scale")
-        breathe.fromValue = 1.0
-        breathe.toValue = 1.05
-        breathe.duration = 3.0 * speed
-        breathe.autoreverses = true
-        breathe.repeatCount = .infinity
-        breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        imageView.layer?.add(breathe, forKey: "breathe")
-
-        // Wiggle
-        let wiggle = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-        let angle = CGFloat.pi / 60  // ~3 degrees
-        wiggle.values = [0, angle, 0, -angle, 0]
-        wiggle.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
-        wiggle.duration = 5.0 * speed
-        wiggle.repeatCount = .infinity
-        wiggle.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        imageView.layer?.add(wiggle, forKey: "wiggle")
-
-        // Blink
-        scheduleBlink()
-    }
-
-    private func scheduleBlink() {
-        let interval = Double.random(in: 4.0...6.0) * animationSpeed.multiplier
-        blinkTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            self?.performBlink()
+            self.petLocalX += dx > 0 ? speed : -speed
+            self.petLocalX = max(self.minRunX, min(self.petLocalX, self.maxRunX))
+            self.updatePetPosition()
         }
     }
 
-    private func performBlink() {
-        let blink = CAKeyframeAnimation(keyPath: "transform.scale.y")
-        blink.values = [1.0, 0.1, 1.0]
-        blink.keyTimes = [0, 0.5, 1.0]
-        blink.duration = 0.15 * animationSpeed.multiplier
-        imageView.layer?.add(blink, forKey: "blink")
-        scheduleBlink()
+    func stopRunning() {
+        isRunning = false
+        runTimer?.invalidate()
+        runTimer = nil
     }
+
+    func returnHome() {
+        startRunning(to: homeX)
+    }
+
+    // MARK: - Legacy animation support
 
     func squish() {
         let squish = CAKeyframeAnimation(keyPath: "transform.scale.y")
         squish.values = [1.0, 0.7, 1.1, 1.0]
         squish.keyTimes = [0, 0.3, 0.7, 1.0]
-        squish.duration = 0.3 * animationSpeed.multiplier
+        squish.duration = 0.3
         imageView.layer?.add(squish, forKey: "squish")
     }
 
     func setAnimationSpeed(_ speed: AnimationSpeed) {
-        animationSpeed = speed
-        startIdleAnimations()
+        // Adjust frame rate based on speed
+        stopFrameAnimation()
+        let rate: TimeInterval
+        switch speed {
+        case .slow: rate = 1.0 / 10.0
+        case .normal: rate = 1.0 / 15.0
+        case .fast: rate = 1.0 / 22.0
+        }
+        frameTimer = Timer.scheduledTimer(withTimeInterval: rate, repeats: true) { [weak self] _ in
+            guard let self = self, !self.frames.isEmpty else { return }
+            self.currentFrameIndex = (self.currentFrameIndex + 1) % self.frames.count
+            self.imageView.image = self.frames[self.currentFrameIndex]
+        }
     }
 
     // MARK: - Mouse event forwarding
