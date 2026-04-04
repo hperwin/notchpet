@@ -7,6 +7,8 @@ final class PetInteraction {
     private var dragStartX: CGFloat = 0
     private var windowStartX: CGFloat = 0
     var lastDragTime: Date = .distantPast
+    /// Override default click behavior (squish) — e.g. to open the panel
+    var onClickAction: (() -> Void)?
 
     private var resetPositionAction: (() -> Void)?
     private var quitAction: (() -> Void)?
@@ -48,8 +50,9 @@ final class PetInteraction {
             }
             lastDragTime = Date()
         } else {
-            // Click - squish!
+            // Click — squish + custom action (open panel)
             petView?.squish()
+            onClickAction?()
         }
         isDragging = false
     }

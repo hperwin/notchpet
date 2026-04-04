@@ -19,6 +19,11 @@ cp ".build/release/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/"
 cp "Resources/blob.png" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
+# Copy SPM resource bundle (contains blob.png for Bundle.module)
+if [ -d ".build/release/NotchPet_NotchPet.bundle" ]; then
+    cp -r ".build/release/NotchPet_NotchPet.bundle" "$APP_BUNDLE/Contents/Resources/"
+fi
+
 echo "App bundle created at: $APP_BUNDLE"
 echo ""
 echo "To install, run: ./Scripts/install.sh"

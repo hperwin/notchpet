@@ -19,7 +19,7 @@ final class PetView: NSView {
 
     private func setup() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
 
         guard let image = loadAndProcessImage() else {
             NSLog("NotchPet: Failed to load blob.png")
@@ -32,7 +32,7 @@ final class PetView: NSView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
 
-        let petSize: CGFloat = 28
+        let petSize: CGFloat = PetWindow.petSize
         NSLayoutConstraint.activate([
             imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
             imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -41,6 +41,42 @@ final class PetView: NSView {
         ])
 
         startIdleAnimations()
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        // Draw the shaped black background: top edge and right edge are straight
+        // (flush with notch), bottom-left corner is rounded to match notch radius
+        let radius = PetWindow.notchCornerRadius
+        let rect = bounds
+
+        let path = CGMutablePath()
+        // Start at top-left
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        // Top edge → top-right (straight, flush with notch top)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        // Right edge → bottom-right (straight, flush with notch side)
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        // Bottom edge → bottom-left with rounded corner
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.minY))
+        path.addArc(center: CGPoint(x: rect.minX + radius, y: rect.minY + radius),
+                     radius: radius,
+                     startAngle: -.pi / 2,
+                     endAngle: .pi,
+                     clockwise: true)
+        // Left edge → back to top-left
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+
+        let shape = CAShapeLayer()
+        shape.path = path
+        shape.fillColor = NSColor.black.cgColor
+
+        // Remove old background shape if any
+        layer?.sublayers?.filter { $0.name == "bg" }.forEach { $0.removeFromSuperlayer() }
+        shape.name = "bg"
+        layer?.insertSublayer(shape, at: 0)
     }
 
     private func loadAndProcessImage() -> NSImage? {
