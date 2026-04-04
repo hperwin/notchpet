@@ -11,7 +11,10 @@ let package = Package(
                 .copy("Resources/blob.png"),
                 .copy("Resources/frames"),
                 .copy("Resources/pokemon"),
-                .copy("Resources/berries")
+                .copy("Resources/berries"),
+                .copy("Resources/party_strip.png"),
+                .copy("Resources/party_strip_blue.png"),
+                .copy("Resources/party_strip_red.png")
             ]
         ),
         // .testTarget(

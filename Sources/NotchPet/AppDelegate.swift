@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var gameSystems: GameSystems!
     private var petState: PetState!
     private var foodSpawner: FoodSpawner!
+    private var partyStrip: PartyStrip!
     private var tickTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,8 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petView.homeX = PetWindow.notchLeftOffset - PetWindow.petSize - 4
         petView.setPetLocalX(petView.homeX)
 
-        // Show selected Pokemon sprite
+        // Show selected Pokemon sprite + start occasional bouncing
         loadSelectedPet()
+        petView.startRandomBouncing()
 
         // Panel window
         panelWindow = PanelWindow(contentRect: .zero)
@@ -64,6 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Walk controller (disabled)
         walkController = WalkController()
+
+        // Party strip — shows party Pokemon to the right of the notch
+        partyStrip = PartyStrip()
+        partyStrip.onPokemonTapped = { [weak self] id in
+            self?.selectPet(id, shiny: false)
+        }
+        updatePartyStrip()
+        partyStrip.show()
 
         // Food spawner — berries appear to the right of the notch
         foodSpawner = FoodSpawner(petWindowFrame: { [weak self] in
@@ -185,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .levelUp(let level):
             animatePetCelebration()
             updatePetVisuals()
+            updatePartyStrip()
             NSLog("NotchPet: Level up! Now level \(level)")
 
         case .evolved(let stage):
@@ -307,6 +318,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updatePetVisuals()
             panelWindow.refreshData(petState)
         }
+    }
+
+    // MARK: - Party Strip
+
+    private func updatePartyStrip() {
+        // Auto-fill party with first 6 unlocked Pokemon
+        let unlocked = PetCollection.unlockedPets(for: petState.level).prefix(6).map(\.id)
+        petState.party = Array(unlocked)
+        partyStrip.updateParty(petState.party, level: petState.level)
     }
 
     // MARK: - Helpers

@@ -247,6 +247,42 @@ final class PetView: NSView {
         eat.keyTimes = [0, 0.2, 0.5, 0.8, 1.0]
         eat.duration = 0.4
         imageView.layer?.add(eat, forKey: "eat")
+
+        // Also do a little hop
+        playBounce()
+    }
+
+    // MARK: - Bounce
+
+    /// Small hop — the pet jumps up slightly and comes back down
+    func playBounce() {
+        let bounce = CAKeyframeAnimation(keyPath: "transform.translation.y")
+        bounce.values = [0, 4, 0]
+        bounce.keyTimes = [0, 0.4, 1.0]
+        bounce.duration = 0.25
+        bounce.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        imageView.layer?.add(bounce, forKey: "bounce")
+    }
+
+    /// Start occasional random bouncing (every 8-15 seconds)
+    private var bounceTimer: Timer?
+
+    func startRandomBouncing() {
+        scheduleNextBounce()
+    }
+
+    private func scheduleNextBounce() {
+        bounceTimer?.invalidate()
+        let wait = Double.random(in: 8.0...15.0)
+        bounceTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
+            self?.playBounce()
+            self?.scheduleNextBounce()
+        }
+    }
+
+    func stopRandomBouncing() {
+        bounceTimer?.invalidate()
+        bounceTimer = nil
     }
 
     // MARK: - Legacy animation support

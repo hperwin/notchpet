@@ -17,6 +17,7 @@ final class PanelWindow: NSWindow {
     private let bottomCornerRadius: CGFloat = 12
     private let openDuration: TimeInterval = 0.3
     private let closeDuration: TimeInterval = 0.2
+    private var panelScrollView: NSScrollView?
     private let cardRadius: CGFloat = 10
     private let padding: CGFloat = 12
     private let cardPadding: CGFloat = 10
@@ -28,6 +29,8 @@ final class PanelWindow: NSWindow {
 
     // Cached state for rebuilds
     private var lastState: PetState?
+    private var currentState: PetState?
+    private var mainContentView: NSView?
 
     // Top row
     private let petImageView = NSImageView()
@@ -126,6 +129,16 @@ final class PanelWindow: NSWindow {
             self.animator().setFrame(endFrame, display: true)
         }
 
+        // Scroll to top after opening
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            if let scrollView = self?.panelScrollView,
+               let docView = scrollView.documentView {
+                let topPoint = NSPoint(x: 0, y: docView.frame.height)
+                scrollView.contentView.scroll(to: topPoint)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
+
         installEventMonitors()
     }
 
@@ -176,6 +189,7 @@ final class PanelWindow: NSWindow {
 
     func refreshData(_ state: PetState) {
         lastState = state
+        currentState = state
 
         // Pet sprite
         let sprite = PetCollection.spriteImage(for: state.selectedPet, shiny: state.useShiny)
@@ -244,6 +258,7 @@ final class PanelWindow: NSWindow {
         contentView = container
 
         let scrollView = NSScrollView()
+        panelScrollView = scrollView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -266,6 +281,7 @@ final class PanelWindow: NSWindow {
 
         let clipView = scrollView.contentView
         scrollView.documentView = mainContent
+        mainContentView = mainContent
 
         NSLayoutConstraint.activate([
             mainContent.topAnchor.constraint(equalTo: clipView.topAnchor),
@@ -659,7 +675,7 @@ final class PanelWindow: NSWindow {
             )
             cell.target = self
             cell.onTap = { [weak self] id in
-                self?.onPetSelected?(id, false)
+                self?.showPokemonDetail(id: id)
             }
             pokemonGridContainer.addSubview(cell)
             pokemonCells.append(cell)
@@ -705,6 +721,39 @@ final class PanelWindow: NSWindow {
         row.alignment = .centerY
         row.translatesAutoresizingMaskIntoConstraints = false
         return row
+    }
+
+    // MARK: - Detail Navigation
+
+    private func showPokemonDetail(id: String) {
+        guard let state = currentState,
+              let scrollView = panelScrollView,
+              let entry = PetCollection.allPokemon.first(where: { $0.id == id }) else { return }
+
+        let unlocked = entry.unlockLevel <= state.level
+        let shinyUnlocked = state.unlockedShinies.contains(id)
+
+        let detail = PokemonDetailView(entry: entry, unlocked: unlocked, shinyUnlocked: shinyUnlocked, currentLevel: state.level)
+        detail.onBack = { [weak self] in
+            self?.showMainContent()
+        }
+        detail.onSelectPet = { [weak self] petId, shiny in
+            self?.onPetSelected?(petId, shiny)
+            self?.showMainContent()
+        }
+        detail.setAsContent(in: scrollView)
+    }
+
+    private func showMainContent() {
+        guard let scrollView = panelScrollView, let main = mainContentView else { return }
+        scrollView.documentView = main
+        // Scroll to top
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            if let docView = scrollView.documentView {
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: docView.frame.height))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
     }
 
     // MARK: - Helpers

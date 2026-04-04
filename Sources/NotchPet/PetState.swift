@@ -175,6 +175,7 @@ final class PetState: Codable {
 
     // Pet selection
     var selectedPet: String = "leafeon"  // pokemon id
+    var party: [String] = ["leafeon"]   // up to 6 pokemon ids for menu bar party strip
     var useShiny: Bool = false
     var unlockedShinies: [String] = []   // pokemon ids with shiny unlocked
     var foodEaten: Int = 0
