@@ -1,74 +1,63 @@
 import AppKit
 import QuartzCore
 
-// MARK: - PanelWindow
+// MARK: - PanelWindow (DS Pokemon Party Screen Style)
 
 final class PanelWindow: NSWindow {
 
     // Public API
     var isOpen: Bool = false
     var onPrestige: (() -> Void)?
-    /// Called when user selects a pet from the picker: (pokemonId, isShiny)
     var onPetSelected: ((String, Bool) -> Void)?
+    var onPartyChanged: (([String]) -> Void)?
 
     // Layout constants
     private let panelWidth: CGFloat = 520
-    private let panelMaxHeight: CGFloat = 380
+    private let panelMaxHeight: CGFloat = 420
     private let bottomCornerRadius: CGFloat = 12
     private let openDuration: TimeInterval = 0.3
     private let closeDuration: TimeInterval = 0.2
     private var panelScrollView: NSScrollView?
-    private let cardRadius: CGFloat = 10
-    private let padding: CGFloat = 12
-    private let cardPadding: CGFloat = 10
 
-    // Accent color
-    private let accent = NSColor(red: 0.29, green: 0.62, blue: 1.0, alpha: 1)   // #4A9EFF
-    private let cardBg = NSColor(red: 0.102, green: 0.102, blue: 0.102, alpha: 1) // #1a1a1a
-    private let cardBorder = NSColor(red: 0.165, green: 0.165, blue: 0.165, alpha: 1) // #2a2a2a
+    // DS Color palette
+    private let skyBlue = NSColor(red: 0x78/255, green: 0xC8/255, blue: 0xF0/255, alpha: 1)
+    private let cardGreenTop = NSColor(red: 0x48/255, green: 0xB0/255, blue: 0x48/255, alpha: 1)
+    private let cardGreenBot = NSColor(red: 0x38/255, green: 0xA0/255, blue: 0x38/255, alpha: 1)
+    private let cardBorderGreen = NSColor(red: 0x28/255, green: 0x68/255, blue: 0x28/255, alpha: 1)
+    private let selectedRed = NSColor(red: 0xF8/255, green: 0x38/255, blue: 0x38/255, alpha: 1)
+    private let hpGreen = NSColor(red: 0x48/255, green: 0xD0/255, blue: 0x48/255, alpha: 1)
+    private let hpTrack = NSColor(red: 0x1A/255, green: 0x1A/255, blue: 0x1A/255, alpha: 1)
+    private let tabBarBg = NSColor(red: 0x28/255, green: 0x68/255, blue: 0xA0/255, alpha: 1)
+    private let tabActive = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
+    private let tabInactive = NSColor(red: 0x38/255, green: 0x78/255, blue: 0xB8/255, alpha: 1)
+    private let statsBg = NSColor(red: 0xF0/255, green: 0xF0/255, blue: 0xF0/255, alpha: 1)
 
-    // Cached state for rebuilds
+    // Cached state
     private var lastState: PetState?
     private var currentState: PetState?
-    private var mainContentView: NSView?
 
-    // Top row
-    private let petImageView = NSImageView()
-    private let petNameLabel = makeLabel(size: 14, bold: true, color: .white)
-    private let stageLabel = makeLabel(size: 11, bold: false, color: NSColor(white: 0.53, alpha: 1))
-    private let levelLabel = makeLabel(size: 13, bold: true, color: .white)
-    private let xpBar = ProgressBarView(accentHex: 0x4A9EFF)
-    private let xpDetailLabel = makeLabel(size: 10, bold: false, color: NSColor(white: 0.53, alpha: 1))
-    private let streakLabel = makeLabel(size: 11, bold: false, color: NSColor(white: 0.53, alpha: 1))
-    private let wpmLabel = makeLabel(size: 11, bold: false, color: NSColor(white: 0.53, alpha: 1))
-    private let shinyToggle = NSButton()
-    private var shinyToggleContainer: NSView?
+    // Tab system
+    private enum Tab: Int, CaseIterable {
+        case party = 0
+        case pokemon = 1
+        case stats = 2
+        case achievements = 3
 
-    // Pokemon grid
-    private let pokemonGridContainer = NSView()
-    private var pokemonCells: [PokemonCellView] = []
+        var title: String {
+            switch self {
+            case .party: return "Party"
+            case .pokemon: return "Pokemon"
+            case .stats: return "Stats"
+            case .achievements: return "Achievements"
+            }
+        }
+    }
 
-    // Stats card
-    private let statTotalWords = StatCell(title: "Words")
-    private let statFoodEaten = StatCell(title: "Berries Fed")
-    private let statPrestige = StatCell(title: "Prestige")
-    private let statMutation = StatCell(title: "Mutation")
-
-    // Achievements card
-    private let achievementsStack = NSStackView()
-
-    // Evolution track
-    private var evolutionDots: [NSView] = []
-
-    // Weekly challenge
-    private let challengeBar = ProgressBarView(accentHex: 0x4A9EFF)
-    private let challengeLabel = makeLabel(size: 10, bold: false, color: .lightGray)
-    private let challengePercent = makeLabel(size: 10, bold: true, color: NSColor(red: 0.29, green: 0.62, blue: 1.0, alpha: 1))
-    private var challengeCard: NSView?
-
-    // Prestige
-    private let prestigeButton = NSButton()
-    private var prestigeCard: NSView?
+    private var currentTab: Tab = .party
+    private var tabButtons: [NSButton] = []
+    private var tabContentView: NSView?
+    private var tabBarView: NSView?
+    private var containerView: NSView?
 
     // Event monitors
     private var localMonitor: Any?
@@ -190,73 +179,28 @@ final class PanelWindow: NSWindow {
     func refreshData(_ state: PetState) {
         lastState = state
         currentState = state
-
-        // Pet sprite
-        let sprite = PetCollection.spriteImage(for: state.selectedPet, shiny: state.useShiny)
-        petImageView.image = sprite
-
-        // Pet info
-        let entry = PetCollection.allPokemon.first(where: { $0.id == state.selectedPet })
-        petNameLabel.stringValue = entry?.displayName ?? state.selectedPet.capitalized
-        stageLabel.stringValue = state.evolutionStage.name
-
-        // Level & XP
-        levelLabel.stringValue = "Level \(state.level)"
-        xpBar.progress = state.levelProgress
-        xpDetailLabel.stringValue = "\(state.xp) / \(state.xpToNextLevel) XP"
-        streakLabel.stringValue = "Streak: \(state.typingStreak)d"
-        wpmLabel.stringValue = "WPM: \(Int(state.currentWPM))"
-
-        // Shiny toggle
-        let hasShinyUnlocked = state.unlockedShinies.contains(state.selectedPet)
-        shinyToggleContainer?.isHidden = !hasShinyUnlocked
-        shinyToggle.state = state.useShiny ? .on : .off
-
-        // Pokemon grid
-        rebuildPokemonGrid(state)
-
-        // Stats
-        statTotalWords.value = formatNumber(state.totalWordsTyped)
-        statFoodEaten.value = "\(state.foodEaten)"
-        statPrestige.value = "\(state.prestigeCount)"
-        statMutation.value = state.mutationColor ?? "None"
-
-        // Evolution dots
-        let currentIndex = state.evolutionStage.rawValue
-        for (i, dot) in evolutionDots.enumerated() {
-            dot.layer?.backgroundColor = i <= currentIndex
-                ? accent.cgColor
-                : NSColor(white: 0.25, alpha: 1).cgColor
-            dot.layer?.borderColor = i == currentIndex
-                ? accent.cgColor
-                : NSColor.clear.cgColor
-            dot.layer?.borderWidth = i == currentIndex ? 2 : 0
-        }
-
-        // Achievements
-        rebuildAchievements(state.achievements)
-
-        // Weekly challenge
-        if let challenge = state.weeklyChallenge {
-            challengeCard?.isHidden = false
-            challengeLabel.stringValue = challenge.description
-            challengeBar.progress = challenge.progress
-            let pct = Int(challenge.progress * 100)
-            challengePercent.stringValue = "\(pct)%"
-        } else {
-            challengeCard?.isHidden = true
-        }
-
-        // Prestige
-        prestigeCard?.isHidden = state.level < 20
+        rebuildTabContent()
     }
 
     // MARK: - Build UI
 
     private func buildUI() {
-        let container = PanelBackgroundView(cornerRadius: bottomCornerRadius)
-        contentView = container
+        let bg = PanelBackgroundView(cornerRadius: bottomCornerRadius, fillColor: skyBlue)
+        contentView = bg
 
+        let mainContainer = NSView()
+        mainContainer.translatesAutoresizingMaskIntoConstraints = false
+        bg.addSubview(mainContainer)
+        containerView = mainContainer
+
+        NSLayoutConstraint.activate([
+            mainContainer.topAnchor.constraint(equalTo: bg.topAnchor),
+            mainContainer.leadingAnchor.constraint(equalTo: bg.leadingAnchor),
+            mainContainer.trailingAnchor.constraint(equalTo: bg.trailingAnchor),
+            mainContainer.bottomAnchor.constraint(equalTo: bg.bottomAnchor),
+        ])
+
+        // Tab content area (scrollable)
         let scrollView = NSScrollView()
         panelScrollView = scrollView
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -266,466 +210,786 @@ final class PanelWindow: NSWindow {
         scrollView.scrollerStyle = .overlay
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        container.addSubview(scrollView)
+        mainContainer.addSubview(scrollView)
 
-        NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-        ])
-
-        // Main content view laid out with constraints
-        let mainContent = NSView()
-        mainContent.translatesAutoresizingMaskIntoConstraints = false
+        let contentHolder = NSView()
+        contentHolder.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = contentHolder
+        tabContentView = contentHolder
 
         let clipView = scrollView.contentView
-        scrollView.documentView = mainContent
-        mainContentView = mainContent
-
         NSLayoutConstraint.activate([
-            mainContent.topAnchor.constraint(equalTo: clipView.topAnchor),
-            mainContent.leadingAnchor.constraint(equalTo: clipView.leadingAnchor),
-            mainContent.trailingAnchor.constraint(equalTo: clipView.trailingAnchor),
-            mainContent.widthAnchor.constraint(equalTo: clipView.widthAnchor),
+            contentHolder.topAnchor.constraint(equalTo: clipView.topAnchor),
+            contentHolder.leadingAnchor.constraint(equalTo: clipView.leadingAnchor),
+            contentHolder.trailingAnchor.constraint(equalTo: clipView.trailingAnchor),
+            contentHolder.widthAnchor.constraint(equalTo: clipView.widthAnchor),
         ])
 
-        // ===== ROW 1: Pet sprite (left) + Info card (right) =====
-        let petCard = buildPetSpriteCard()
-        let infoCard = buildInfoCard()
-        mainContent.addSubview(petCard)
-        mainContent.addSubview(infoCard)
+        // Tab bar at bottom
+        let tabBar = buildTabBar()
+        tabBarView = tabBar
+        mainContainer.addSubview(tabBar)
 
         NSLayoutConstraint.activate([
-            petCard.topAnchor.constraint(equalTo: mainContent.topAnchor, constant: padding),
-            petCard.leadingAnchor.constraint(equalTo: mainContent.leadingAnchor, constant: padding),
-            petCard.widthAnchor.constraint(equalToConstant: 120),
-            petCard.heightAnchor.constraint(equalToConstant: 100),
+            scrollView.topAnchor.constraint(equalTo: mainContainer.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: mainContainer.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: mainContainer.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: tabBar.topAnchor),
 
-            infoCard.topAnchor.constraint(equalTo: mainContent.topAnchor, constant: padding),
-            infoCard.leadingAnchor.constraint(equalTo: petCard.trailingAnchor, constant: 8),
-            infoCard.trailingAnchor.constraint(equalTo: mainContent.trailingAnchor, constant: -padding),
-            infoCard.heightAnchor.constraint(equalToConstant: 100),
-        ])
-
-        // ===== ROW 2: Pokemon Collection (full width) =====
-        let collectionCard = buildCollectionCard()
-        mainContent.addSubview(collectionCard)
-
-        NSLayoutConstraint.activate([
-            collectionCard.topAnchor.constraint(equalTo: petCard.bottomAnchor, constant: 8),
-            collectionCard.leadingAnchor.constraint(equalTo: mainContent.leadingAnchor, constant: padding),
-            collectionCard.trailingAnchor.constraint(equalTo: mainContent.trailingAnchor, constant: -padding),
-        ])
-
-        // ===== ROW 3: Stats (left) + Achievements (right) =====
-        let statsCard = buildStatsCard()
-        let achievementsCard = buildAchievementsCard()
-        mainContent.addSubview(statsCard)
-        mainContent.addSubview(achievementsCard)
-
-        NSLayoutConstraint.activate([
-            statsCard.topAnchor.constraint(equalTo: collectionCard.bottomAnchor, constant: 8),
-            statsCard.leadingAnchor.constraint(equalTo: mainContent.leadingAnchor, constant: padding),
-            statsCard.widthAnchor.constraint(equalTo: mainContent.widthAnchor, multiplier: 0.5, constant: -(padding + 4)),
-
-            achievementsCard.topAnchor.constraint(equalTo: collectionCard.bottomAnchor, constant: 8),
-            achievementsCard.leadingAnchor.constraint(equalTo: statsCard.trailingAnchor, constant: 8),
-            achievementsCard.trailingAnchor.constraint(equalTo: mainContent.trailingAnchor, constant: -padding),
-        ])
-
-        // ===== ROW 4: Evolution (left) + Weekly Challenge (right) =====
-        let evoCard = buildEvolutionCard()
-        let chalCard = buildChallengeCard()
-        challengeCard = chalCard
-        mainContent.addSubview(evoCard)
-        mainContent.addSubview(chalCard)
-
-        // Prestige button (hidden unless level >= 20)
-        let pCard = buildPrestigeCard()
-        prestigeCard = pCard
-        mainContent.addSubview(pCard)
-
-        NSLayoutConstraint.activate([
-            evoCard.topAnchor.constraint(equalTo: statsCard.bottomAnchor, constant: 8),
-            evoCard.leadingAnchor.constraint(equalTo: mainContent.leadingAnchor, constant: padding),
-            evoCard.widthAnchor.constraint(equalTo: mainContent.widthAnchor, multiplier: 0.5, constant: -(padding + 4)),
-
-            chalCard.topAnchor.constraint(equalTo: achievementsCard.bottomAnchor, constant: 8),
-            chalCard.leadingAnchor.constraint(equalTo: evoCard.trailingAnchor, constant: 8),
-            chalCard.trailingAnchor.constraint(equalTo: mainContent.trailingAnchor, constant: -padding),
-
-            pCard.topAnchor.constraint(equalTo: evoCard.bottomAnchor, constant: 8),
-            pCard.leadingAnchor.constraint(equalTo: mainContent.leadingAnchor, constant: padding),
-            pCard.trailingAnchor.constraint(equalTo: mainContent.trailingAnchor, constant: -padding),
-            pCard.heightAnchor.constraint(equalToConstant: 36),
-
-            pCard.bottomAnchor.constraint(lessThanOrEqualTo: mainContent.bottomAnchor, constant: -padding),
-            chalCard.bottomAnchor.constraint(lessThanOrEqualTo: mainContent.bottomAnchor, constant: -(padding + 44)),
-            evoCard.bottomAnchor.constraint(lessThanOrEqualTo: mainContent.bottomAnchor, constant: -(padding + 44)),
+            tabBar.leadingAnchor.constraint(equalTo: mainContainer.leadingAnchor),
+            tabBar.trailingAnchor.constraint(equalTo: mainContainer.trailingAnchor),
+            tabBar.bottomAnchor.constraint(equalTo: mainContainer.bottomAnchor),
+            tabBar.heightAnchor.constraint(equalToConstant: 40),
         ])
     }
 
-    // MARK: - Section Builders
+    // MARK: - Tab Bar
 
-    private func buildPetSpriteCard() -> NSView {
-        let card = SectionCard()
-
-        petImageView.imageScaling = .scaleProportionallyUpOrDown
-        petImageView.translatesAutoresizingMaskIntoConstraints = false
-
-        card.addSubview(petImageView)
-        NSLayoutConstraint.activate([
-            petImageView.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            petImageView.centerYAnchor.constraint(equalTo: card.centerYAnchor),
-            petImageView.widthAnchor.constraint(equalToConstant: 80),
-            petImageView.heightAnchor.constraint(equalToConstant: 80),
-        ])
-
-        return card
-    }
-
-    private func buildInfoCard() -> NSView {
-        let card = SectionCard()
+    private func buildTabBar() -> NSView {
+        let bar = NSView()
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = tabBarBg.cgColor
+        bar.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView()
-        stack.orientation = .vertical
+        stack.orientation = .horizontal
+        stack.distribution = .fillEqually
         stack.spacing = 4
-        stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
+        bar.addSubview(stack)
 
-        // Level label
-        levelLabel.font = NSFont.boldSystemFont(ofSize: 13)
-
-        // XP bar row
-        xpBar.translatesAutoresizingMaskIntoConstraints = false
-        xpBar.heightAnchor.constraint(equalToConstant: 6).isActive = true
-
-        // Pet name + stage
-        let nameRow = NSStackView(views: [petNameLabel, dotSeparator(), stageLabel])
-        nameRow.orientation = .horizontal
-        nameRow.spacing = 6
-
-        // Streak + WPM row
-        let statsRow = NSStackView(views: [streakLabel, dotSeparator(), wpmLabel])
-        statsRow.orientation = .horizontal
-        statsRow.spacing = 6
-
-        // Shiny toggle
-        shinyToggle.setButtonType(.switch)
-        shinyToggle.title = "Shiny"
-        shinyToggle.font = NSFont.systemFont(ofSize: 10)
-        shinyToggle.contentTintColor = NSColor(white: 0.53, alpha: 1)
-        (shinyToggle.cell as? NSButtonCell)?.attributedTitle = NSAttributedString(
-            string: "Shiny",
-            attributes: [.foregroundColor: NSColor(white: 0.53, alpha: 1), .font: NSFont.systemFont(ofSize: 10)]
-        )
-        shinyToggle.target = self
-        shinyToggle.action = #selector(shinyToggled)
-        shinyToggle.translatesAutoresizingMaskIntoConstraints = false
-        let shinyContainer = NSView()
-        shinyContainer.translatesAutoresizingMaskIntoConstraints = false
-        shinyContainer.addSubview(shinyToggle)
         NSLayoutConstraint.activate([
-            shinyToggle.leadingAnchor.constraint(equalTo: shinyContainer.leadingAnchor),
-            shinyToggle.topAnchor.constraint(equalTo: shinyContainer.topAnchor),
-            shinyToggle.bottomAnchor.constraint(equalTo: shinyContainer.bottomAnchor),
-        ])
-        shinyToggleContainer = shinyContainer
-
-        // XP detail + shiny on same row
-        let xpRow = NSStackView(views: [xpDetailLabel, shinyContainer])
-        xpRow.orientation = .horizontal
-        xpRow.spacing = 8
-
-        stack.addArrangedSubview(levelLabel)
-        stack.addArrangedSubview(xpBar)
-        stack.addArrangedSubview(xpRow)
-        stack.addArrangedSubview(nameRow)
-        stack.addArrangedSubview(statsRow)
-
-        card.addSubview(stack)
-        NSLayoutConstraint.activate([
-            xpBar.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
-            xpBar.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
-        ])
-        pinToCard(stack, card: card)
-        return card
-    }
-
-    private func buildCollectionCard() -> NSView {
-        let card = SectionCard()
-
-        let header = Self.makeLabel(size: 11, bold: true, color: .white)
-        header.stringValue = "Collection"
-
-        pokemonGridContainer.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 6
-        stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(header)
-        stack.addArrangedSubview(pokemonGridContainer)
-
-        card.addSubview(stack)
-        pinToCard(stack, card: card)
-
-        // Grid container width must fill card
-        NSLayoutConstraint.activate([
-            pokemonGridContainer.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
-            pokemonGridContainer.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: bar.topAnchor, constant: 4),
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
+            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -4),
         ])
 
-        return card
-    }
-
-    private func buildStatsCard() -> NSView {
-        let card = SectionCard()
-        let header = Self.makeLabel(size: 11, bold: true, color: .white)
-        header.stringValue = "Stats"
-
-        let grid = NSGridView(views: [
-            [statTotalWords, statFoodEaten],
-            [statPrestige, statMutation],
-        ])
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        grid.rowSpacing = 8
-        grid.columnSpacing = 12
-        for col in 0..<grid.numberOfColumns {
-            grid.column(at: col).xPlacement = .fill
+        tabButtons.removeAll()
+        for tab in Tab.allCases {
+            let btn = NSButton(title: tab.title, target: self, action: #selector(tabTapped(_:)))
+            btn.tag = tab.rawValue
+            btn.isBordered = false
+            btn.wantsLayer = true
+            btn.font = NSFont.boldSystemFont(ofSize: 11)
+            btn.contentTintColor = .white
+            btn.layer?.cornerRadius = 6
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            stack.addArrangedSubview(btn)
+            tabButtons.append(btn)
         }
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 6
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(header)
-        stack.addArrangedSubview(grid)
-
-        card.addSubview(stack)
-        pinToCard(stack, card: card)
-        return card
+        updateTabButtonStyles()
+        return bar
     }
 
-    private func buildAchievementsCard() -> NSView {
-        let card = SectionCard()
-        let header = Self.makeLabel(size: 11, bold: true, color: .white)
-        header.stringValue = "Achievements"
-
-        achievementsStack.orientation = .vertical
-        achievementsStack.spacing = 4
-        achievementsStack.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 6
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(header)
-        stack.addArrangedSubview(achievementsStack)
-
-        card.addSubview(stack)
-        pinToCard(stack, card: card)
-        return card
+    private func updateTabButtonStyles() {
+        for btn in tabButtons {
+            let isActive = btn.tag == currentTab.rawValue
+            btn.layer?.backgroundColor = isActive ? tabActive.cgColor : tabInactive.cgColor
+            btn.contentTintColor = isActive ? .black : .white
+        }
     }
 
-    private func buildEvolutionCard() -> NSView {
-        let card = SectionCard()
-        let header = Self.makeLabel(size: 11, bold: true, color: .white)
-        header.stringValue = "Evolution"
+    @objc private func tabTapped(_ sender: NSButton) {
+        guard let tab = Tab(rawValue: sender.tag) else { return }
+        currentTab = tab
+        updateTabButtonStyles()
+        rebuildTabContent()
+    }
 
-        let dotsStack = NSStackView()
-        dotsStack.orientation = .horizontal
-        dotsStack.spacing = 6
-        dotsStack.alignment = .centerY
-        dotsStack.distribution = .fillEqually
+    // MARK: - Tab Content Rebuild
 
-        evolutionDots = []
-        for stage in EvolutionStage.allCases {
-            let dot = NSView()
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 7
-            dot.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
-            dot.translatesAutoresizingMaskIntoConstraints = false
+    private func rebuildTabContent() {
+        guard let contentHolder = tabContentView else { return }
+
+        // Remove all existing subviews
+        contentHolder.subviews.forEach { $0.removeFromSuperview() }
+        // Remove all existing constraints on contentHolder (except intrinsic ones)
+        for c in contentHolder.constraints {
+            contentHolder.removeConstraint(c)
+        }
+
+        guard let state = currentState else { return }
+
+        switch currentTab {
+        case .party:
+            buildPartyTab(in: contentHolder, state: state)
+        case .pokemon:
+            buildPokemonTab(in: contentHolder, state: state)
+        case .stats:
+            buildStatsTab(in: contentHolder, state: state)
+        case .achievements:
+            buildAchievementsTab(in: contentHolder, state: state)
+        }
+
+        // Scroll to top
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            if let scrollView = self?.panelScrollView,
+               let docView = scrollView.documentView {
+                let topPoint = NSPoint(x: 0, y: docView.frame.height)
+                scrollView.contentView.scroll(to: topPoint)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            }
+        }
+    }
+
+    // MARK: - Party Tab
+
+    private func buildPartyTab(in container: NSView, state: PetState) {
+        let padding: CGFloat = 12
+        let spacing: CGFloat = 8
+        let columnSpacing: CGFloat = 8
+
+        // Title label
+        let title = Self.makeLabel(size: 14, bold: true, color: .white)
+        title.stringValue = "Choose a Pokemon"
+        title.shadow = Self.dsTextShadow()
+        title.alignment = .center
+        container.addSubview(title)
+
+        NSLayoutConstraint.activate([
+            title.topAnchor.constraint(equalTo: container.topAnchor, constant: padding),
+            title.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+        ])
+
+        // Party slots: 2 columns x 3 rows
+        // Slot 0 (lead) is slightly larger
+        let party = state.party
+        var previousBottomAnchor = title.bottomAnchor
+        var previousBottomConstant: CGFloat = spacing + 4
+
+        for row in 0..<3 {
+            let leftIndex = row * 2
+            let rightIndex = row * 2 + 1
+
+            let leftCard = buildPartySlotCard(
+                index: leftIndex,
+                pokemonId: leftIndex < party.count ? party[leftIndex] : nil,
+                state: state,
+                isLead: leftIndex == 0
+            )
+            let rightCard = buildPartySlotCard(
+                index: rightIndex,
+                pokemonId: rightIndex < party.count ? party[rightIndex] : nil,
+                state: state,
+                isLead: false
+            )
+
+            container.addSubview(leftCard)
+            container.addSubview(rightCard)
+
+            let leftHeight: CGFloat = leftIndex == 0 ? 90 : 78
+            let rightHeight: CGFloat = 78
+
             NSLayoutConstraint.activate([
-                dot.widthAnchor.constraint(equalToConstant: 14),
-                dot.heightAnchor.constraint(equalToConstant: 14),
+                leftCard.topAnchor.constraint(equalTo: previousBottomAnchor, constant: previousBottomConstant),
+                leftCard.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: padding),
+                leftCard.trailingAnchor.constraint(equalTo: container.centerXAnchor, constant: -(columnSpacing / 2)),
+                leftCard.heightAnchor.constraint(equalToConstant: leftHeight),
+
+                rightCard.topAnchor.constraint(equalTo: previousBottomAnchor, constant: previousBottomConstant),
+                rightCard.leadingAnchor.constraint(equalTo: container.centerXAnchor, constant: columnSpacing / 2),
+                rightCard.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -padding),
+                rightCard.heightAnchor.constraint(equalToConstant: rightHeight),
             ])
 
-            let lbl = Self.makeLabel(size: 8, bold: false, color: NSColor(white: 0.53, alpha: 1))
-            lbl.stringValue = stage.name
-            lbl.alignment = .center
-
-            let col = NSStackView()
-            col.orientation = .vertical
-            col.alignment = .centerX
-            col.spacing = 2
-            col.addArrangedSubview(dot)
-            col.addArrangedSubview(lbl)
-            dotsStack.addArrangedSubview(col)
-            evolutionDots.append(dot)
+            // Use the taller card for next row anchor
+            previousBottomAnchor = leftHeight >= rightHeight ? leftCard.bottomAnchor : rightCard.bottomAnchor
+            previousBottomConstant = spacing
         }
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 6
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(header)
-        stack.addArrangedSubview(dotsStack)
-
-        card.addSubview(stack)
-        pinToCard(stack, card: card)
-        return card
-    }
-
-    private func buildChallengeCard() -> NSView {
-        let card = SectionCard()
-        let header = Self.makeLabel(size: 11, bold: true, color: .white)
-        header.stringValue = "Weekly Challenge"
-
-        challengeBar.translatesAutoresizingMaskIntoConstraints = false
-        challengeBar.heightAnchor.constraint(equalToConstant: 6).isActive = true
-
-        let barRow = NSStackView(views: [challengeBar, challengePercent])
-        barRow.orientation = .horizontal
-        barRow.spacing = 6
-        barRow.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.spacing = 4
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        stack.addArrangedSubview(header)
-        stack.addArrangedSubview(challengeLabel)
-        stack.addArrangedSubview(barRow)
-
+        // Bottom constraint
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(spacer)
         NSLayoutConstraint.activate([
-            challengeBar.heightAnchor.constraint(equalToConstant: 6),
+            spacer.topAnchor.constraint(equalTo: previousBottomAnchor, constant: padding),
+            spacer.heightAnchor.constraint(equalToConstant: 1),
+            spacer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            spacer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+    }
 
-        card.addSubview(stack)
-        pinToCard(stack, card: card)
+    private func buildPartySlotCard(index: Int, pokemonId: String?, state: PetState, isLead: Bool) -> NSView {
+        let card = NSView()
+        card.wantsLayer = true
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        if let id = pokemonId, let entry = PetCollection.allPokemon.first(where: { $0.id == id }) {
+            // Filled slot - green gradient card
+            let gradientLayer = CAGradientLayer()
+            gradientLayer.colors = [cardGreenTop.cgColor, cardGreenBot.cgColor]
+            gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)
+            gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)
+            gradientLayer.cornerRadius = 8
+            gradientLayer.borderColor = cardBorderGreen.cgColor
+            gradientLayer.borderWidth = 2
+            card.layer?.cornerRadius = 8
+            card.layer?.masksToBounds = true
+            card.layer = gradientLayer
+
+            // Lead indicator
+            if isLead {
+                let starLabel = Self.makeLabel(size: 9, bold: true, color: NSColor(red: 1, green: 0.85, blue: 0, alpha: 1))
+                starLabel.stringValue = "LEAD"
+                starLabel.shadow = Self.dsTextShadow()
+                card.addSubview(starLabel)
+                NSLayoutConstraint.activate([
+                    starLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
+                    starLabel.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -6),
+                ])
+            }
+
+            // Sprite
+            let spriteSize: CGFloat = isLead ? 52 : 44
+            let spriteView = NSImageView()
+            spriteView.imageScaling = .scaleProportionallyUpOrDown
+            spriteView.image = PetCollection.spriteImage(for: id, shiny: state.useShiny && state.unlockedShinies.contains(id))
+            spriteView.translatesAutoresizingMaskIntoConstraints = false
+            card.addSubview(spriteView)
+
+            // Name label
+            let nameLabel = Self.makeLabel(size: 13, bold: true, color: .white)
+            nameLabel.stringValue = entry.displayName
+            nameLabel.shadow = Self.dsTextShadow()
+            card.addSubview(nameLabel)
+
+            // Level label
+            let levelLabel = Self.makeLabel(size: 11, bold: false, color: .white)
+            levelLabel.stringValue = "Lv.\(state.level)"
+            levelLabel.shadow = Self.dsTextShadow()
+            card.addSubview(levelLabel)
+
+            // HP bar
+            let hpBarTrack = NSView()
+            hpBarTrack.wantsLayer = true
+            hpBarTrack.layer?.backgroundColor = hpTrack.cgColor
+            hpBarTrack.layer?.cornerRadius = 3
+            hpBarTrack.translatesAutoresizingMaskIntoConstraints = false
+            card.addSubview(hpBarTrack)
+
+            let hpBarFill = NSView()
+            hpBarFill.wantsLayer = true
+            hpBarFill.layer?.backgroundColor = hpGreen.cgColor
+            hpBarFill.layer?.cornerRadius = 3
+            hpBarFill.translatesAutoresizingMaskIntoConstraints = false
+            hpBarTrack.addSubview(hpBarFill)
+
+            let hpLabel = Self.makeLabel(size: 9, bold: false, color: NSColor(white: 0.9, alpha: 1))
+            hpLabel.stringValue = "HP"
+            hpLabel.shadow = Self.dsTextShadow()
+            card.addSubview(hpLabel)
+
+            NSLayoutConstraint.activate([
+                spriteView.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 6),
+                spriteView.centerYAnchor.constraint(equalTo: card.centerYAnchor, constant: -2),
+                spriteView.widthAnchor.constraint(equalToConstant: spriteSize),
+                spriteView.heightAnchor.constraint(equalToConstant: spriteSize),
+
+                nameLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: isLead ? 14 : 10),
+                nameLabel.leadingAnchor.constraint(equalTo: spriteView.trailingAnchor, constant: 6),
+
+                levelLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 2),
+                levelLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+
+                hpLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
+                hpLabel.leadingAnchor.constraint(equalTo: spriteView.trailingAnchor, constant: 6),
+
+                hpBarTrack.centerYAnchor.constraint(equalTo: hpLabel.centerYAnchor),
+                hpBarTrack.leadingAnchor.constraint(equalTo: hpLabel.trailingAnchor, constant: 4),
+                hpBarTrack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
+                hpBarTrack.heightAnchor.constraint(equalToConstant: 6),
+
+                hpBarFill.topAnchor.constraint(equalTo: hpBarTrack.topAnchor),
+                hpBarFill.leadingAnchor.constraint(equalTo: hpBarTrack.leadingAnchor),
+                hpBarFill.heightAnchor.constraint(equalTo: hpBarTrack.heightAnchor),
+                hpBarFill.widthAnchor.constraint(equalTo: hpBarTrack.widthAnchor, multiplier: CGFloat(state.levelProgress)),
+            ])
+
+            // Tap to view detail
+            let click = NSClickGestureRecognizer(target: self, action: #selector(partySlotTapped(_:)))
+            card.addGestureRecognizer(click)
+            card.setValue(id, forKey: "toolTip") // store pokemon id in tooltip for retrieval
+
+        } else {
+            // Empty slot - dashed appearance
+            card.layer?.cornerRadius = 8
+            card.layer?.borderWidth = 2
+            card.layer?.borderColor = NSColor(white: 0.6, alpha: 0.5).cgColor
+            card.layer?.backgroundColor = NSColor(white: 1, alpha: 0.1).cgColor
+
+            // Draw dashed border via layer
+            let dashedLayer = CAShapeLayer()
+            dashedLayer.strokeColor = NSColor(white: 0.7, alpha: 0.5).cgColor
+            dashedLayer.fillColor = nil
+            dashedLayer.lineDashPattern = [6, 4]
+            dashedLayer.lineWidth = 2
+            card.layer?.addSublayer(dashedLayer)
+
+            let emptyLabel = Self.makeLabel(size: 12, bold: false, color: NSColor(white: 0.8, alpha: 0.7))
+            emptyLabel.stringValue = "Empty"
+            emptyLabel.alignment = .center
+            card.addSubview(emptyLabel)
+
+            NSLayoutConstraint.activate([
+                emptyLabel.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+                emptyLabel.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+            ])
+
+            // Tap to switch to pokemon tab
+            let click = NSClickGestureRecognizer(target: self, action: #selector(emptySlotTapped))
+            card.addGestureRecognizer(click)
+        }
+
         return card
     }
 
-    private func buildPrestigeCard() -> NSView {
-        let card = SectionCard()
-
-        prestigeButton.title = "Rebirth"
-        prestigeButton.bezelStyle = .rounded
-        prestigeButton.isBordered = false
-        prestigeButton.wantsLayer = true
-        prestigeButton.layer?.backgroundColor = accent.cgColor
-        prestigeButton.layer?.cornerRadius = 6
-        prestigeButton.contentTintColor = .white
-        prestigeButton.font = NSFont.boldSystemFont(ofSize: 12)
-        prestigeButton.target = self
-        prestigeButton.action = #selector(prestigeTapped)
-        prestigeButton.translatesAutoresizingMaskIntoConstraints = false
-
-        card.addSubview(prestigeButton)
-        NSLayoutConstraint.activate([
-            prestigeButton.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
-            prestigeButton.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 8),
-            prestigeButton.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
-            prestigeButton.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4),
-        ])
-
-        card.isHidden = true
-        return card
+    @objc private func partySlotTapped(_ sender: NSClickGestureRecognizer) {
+        guard let card = sender.view, let id = card.toolTip, !id.isEmpty else { return }
+        showPokemonDetail(id: id, showAddToParty: false)
     }
 
-    @objc private func prestigeTapped() {
-        onPrestige?()
+    @objc private func emptySlotTapped() {
+        currentTab = .pokemon
+        updateTabButtonStyles()
+        rebuildTabContent()
     }
 
-    @objc private func shinyToggled() {
-        guard let state = lastState else { return }
-        let isShiny = shinyToggle.state == .on
-        onPetSelected?(state.selectedPet, isShiny)
-    }
+    // MARK: - Pokemon Tab (Collection Grid)
 
-    // MARK: - Pokemon Grid
-
-    private func rebuildPokemonGrid(_ state: PetState) {
-        pokemonCells.forEach { $0.removeFromSuperview() }
-        pokemonCells.removeAll()
-
+    private func buildPokemonTab(in container: NSView, state: PetState) {
+        let padding: CGFloat = 12
         let catalog = PetCollection.catalog(for: state.level)
-        let cols = 10
-        let cellSize: CGFloat = 40
-        let cellSpacing: CGFloat = 4
+        let cols = 5
+        let cellSpacing: CGFloat = 8
+        // Calculate cell size to fill width
+        let totalSpacing = padding * 2 + cellSpacing * CGFloat(cols - 1)
+
+        let gridContainer = NSView()
+        gridContainer.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(gridContainer)
+
+        // Title
+        let title = Self.makeLabel(size: 14, bold: true, color: .white)
+        title.stringValue = "Collection (\(catalog.filter { $0.unlocked }.count)/\(catalog.count))"
+        title.shadow = Self.dsTextShadow()
+        title.alignment = .center
+        container.addSubview(title)
+
+        NSLayoutConstraint.activate([
+            title.topAnchor.constraint(equalTo: container.topAnchor, constant: padding),
+            title.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+
+            gridContainer.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 8),
+            gridContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: padding),
+            gridContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -padding),
+        ])
+
+        // We'll lay cells out manually based on gridContainer's expected width
+        let availableWidth = panelWidth - totalSpacing
+        let cellSize = floor(availableWidth / CGFloat(cols))
 
         for (index, item) in catalog.enumerated() {
             let col = index % cols
             let row = index / cols
 
-            let cell = PokemonCellView(
-                entry: item.entry,
-                unlocked: item.unlocked,
-                isSelected: item.entry.id == state.selectedPet,
-                hasShinyUnlocked: state.unlockedShinies.contains(item.entry.id)
-            )
+            let cell = buildCollectionCell(item: item, state: state, cellSize: cellSize)
             cell.frame = NSRect(
                 x: CGFloat(col) * (cellSize + cellSpacing),
                 y: CGFloat(row) * (cellSize + cellSpacing),
                 width: cellSize,
                 height: cellSize
             )
-            cell.target = self
-            cell.onTap = { [weak self] id in
-                self?.showPokemonDetail(id: id)
-            }
-            pokemonGridContainer.addSubview(cell)
-            pokemonCells.append(cell)
+            gridContainer.addSubview(cell)
         }
 
         let totalRows = (catalog.count + cols - 1) / cols
-        let gridHeight = CGFloat(totalRows) * (cellSize + cellSpacing) - cellSpacing
-        // Update container height
-        for c in pokemonGridContainer.constraints where c.firstAttribute == .height {
-            pokemonGridContainer.removeConstraint(c)
-        }
-        pokemonGridContainer.heightAnchor.constraint(equalToConstant: max(gridHeight, cellSize)).isActive = true
+        let gridHeight = CGFloat(totalRows) * (cellSize + cellSpacing)
+
+        NSLayoutConstraint.activate([
+            gridContainer.heightAnchor.constraint(equalToConstant: max(gridHeight, cellSize)),
+            gridContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -padding),
+        ])
     }
 
-    // MARK: - Achievements
+    private func buildCollectionCell(item: (entry: PokemonEntry, unlocked: Bool), state: PetState, cellSize: CGFloat) -> NSView {
+        let cell = NSView(frame: .zero)
+        cell.wantsLayer = true
+        cell.layer?.cornerRadius = 8
 
-    private func rebuildAchievements(_ achievements: [Achievement]) {
-        achievementsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let sorted = achievements.sorted { a, b in
+        let isInParty = state.party.contains(item.entry.id)
+        let isSelected = item.entry.id == state.selectedPet
+
+        if item.unlocked {
+            // Green card for unlocked
+            let gradient = CAGradientLayer()
+            gradient.colors = [cardGreenTop.cgColor, cardGreenBot.cgColor]
+            gradient.cornerRadius = 8
+            gradient.borderWidth = isSelected ? 3 : 2
+            gradient.borderColor = isSelected ? selectedRed.cgColor : cardBorderGreen.cgColor
+            cell.layer = gradient
+
+            let imageView = NSImageView()
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.image = PetCollection.spriteImage(for: item.entry.id, shiny: false)
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(imageView)
+
+            let nameLabel = Self.makeLabel(size: 8, bold: true, color: .white)
+            nameLabel.stringValue = item.entry.displayName
+            nameLabel.shadow = Self.dsTextShadow()
+            nameLabel.alignment = .center
+            nameLabel.lineBreakMode = .byTruncatingTail
+            cell.addSubview(nameLabel)
+
+            NSLayoutConstraint.activate([
+                imageView.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
+                imageView.topAnchor.constraint(equalTo: cell.topAnchor, constant: 4),
+                imageView.widthAnchor.constraint(equalToConstant: cellSize * 0.6),
+                imageView.heightAnchor.constraint(equalToConstant: cellSize * 0.6),
+
+                nameLabel.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -3),
+                nameLabel.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+                nameLabel.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -2),
+            ])
+
+            if isInParty {
+                let partyDot = NSView()
+                partyDot.wantsLayer = true
+                partyDot.layer?.backgroundColor = tabActive.cgColor
+                partyDot.layer?.cornerRadius = 4
+                partyDot.translatesAutoresizingMaskIntoConstraints = false
+                cell.addSubview(partyDot)
+                NSLayoutConstraint.activate([
+                    partyDot.topAnchor.constraint(equalTo: cell.topAnchor, constant: 3),
+                    partyDot.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -3),
+                    partyDot.widthAnchor.constraint(equalToConstant: 8),
+                    partyDot.heightAnchor.constraint(equalToConstant: 8),
+                ])
+            }
+
+            let click = NSClickGestureRecognizer(target: self, action: #selector(collectionCellTapped(_:)))
+            cell.addGestureRecognizer(click)
+            cell.toolTip = item.entry.id
+
+        } else {
+            // Dark locked cell
+            cell.layer?.backgroundColor = NSColor(white: 0, alpha: 0.4).cgColor
+            cell.layer?.borderWidth = 1
+            cell.layer?.borderColor = NSColor(white: 0.3, alpha: 0.5).cgColor
+
+            let imageView = NSImageView()
+            imageView.imageScaling = .scaleProportionallyUpOrDown
+            imageView.image = PetCollection.spriteImage(for: item.entry.id, shiny: false)
+            imageView.alphaValue = 0.15
+            imageView.translatesAutoresizingMaskIntoConstraints = false
+            cell.addSubview(imageView)
+
+            let lockLabel = Self.makeLabel(size: 9, bold: false, color: NSColor(white: 0.5, alpha: 1))
+            lockLabel.stringValue = "Lv.\(item.entry.unlockLevel)"
+            lockLabel.alignment = .center
+            cell.addSubview(lockLabel)
+
+            NSLayoutConstraint.activate([
+                imageView.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
+                imageView.topAnchor.constraint(equalTo: cell.topAnchor, constant: 4),
+                imageView.widthAnchor.constraint(equalToConstant: cellSize * 0.6),
+                imageView.heightAnchor.constraint(equalToConstant: cellSize * 0.6),
+
+                lockLabel.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -3),
+                lockLabel.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
+            ])
+
+            // Tapping locked cell shows detail too
+            let click = NSClickGestureRecognizer(target: self, action: #selector(collectionCellTapped(_:)))
+            cell.addGestureRecognizer(click)
+            cell.toolTip = item.entry.id
+        }
+
+        return cell
+    }
+
+    @objc private func collectionCellTapped(_ sender: NSClickGestureRecognizer) {
+        guard let cell = sender.view, let id = cell.toolTip, !id.isEmpty else { return }
+        showPokemonDetail(id: id, showAddToParty: true)
+    }
+
+    // MARK: - Stats Tab
+
+    private func buildStatsTab(in container: NSView, state: PetState) {
+        let padding: CGFloat = 16
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 8
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: padding),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: padding),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -padding),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -padding),
+        ])
+
+        // Level & XP card
+        let levelCard = buildStatsSection(title: "Level & XP", rows: [
+            ("Level", "\(state.level)"),
+            ("Total XP", "\(state.totalXPEarned)"),
+            ("XP to Next", "\(state.xp) / \(state.xpToNextLevel)"),
+            ("Evolution", state.evolutionStage.name),
+        ])
+        stack.addArrangedSubview(levelCard)
+        levelCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+        levelCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+
+        // XP progress bar
+        let xpBar = ProgressBarView(accentHex: 0x48D048)
+        xpBar.progress = state.levelProgress
+        xpBar.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(xpBar)
+        NSLayoutConstraint.activate([
+            xpBar.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
+            xpBar.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
+            xpBar.heightAnchor.constraint(equalToConstant: 8),
+        ])
+
+        // Typing stats
+        let typingCard = buildStatsSection(title: "Typing", rows: [
+            ("Words Typed", formatNumber(state.totalWordsTyped)),
+            ("Current WPM", "\(Int(state.currentWPM))"),
+            ("Typing Streak", "\(state.typingStreak) days"),
+            ("Login Streak", "\(state.loginStreak) days"),
+        ])
+        stack.addArrangedSubview(typingCard)
+        typingCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+        typingCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+
+        // Pet stats
+        let petCard = buildStatsSection(title: "Pet", rows: [
+            ("Berries Fed", "\(state.foodEaten)"),
+            ("Prestige Count", "\(state.prestigeCount)"),
+            ("Mutation", state.mutationColor ?? "None"),
+            ("XP Multiplier", String(format: "%.1fx", state.totalMultiplier)),
+        ])
+        stack.addArrangedSubview(petCard)
+        petCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+        petCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+
+        // Weekly challenge
+        if let challenge = state.weeklyChallenge {
+            let chalCard = buildStatsSection(title: "Weekly Challenge", rows: [
+                ("Challenge", challenge.description),
+                ("Progress", "\(challenge.currentValue)/\(challenge.targetValue)"),
+            ])
+            stack.addArrangedSubview(chalCard)
+            chalCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+            chalCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+
+            let chalBar = ProgressBarView(accentHex: 0xF8A800)
+            chalBar.progress = challenge.progress
+            chalBar.translatesAutoresizingMaskIntoConstraints = false
+            stack.addArrangedSubview(chalBar)
+            NSLayoutConstraint.activate([
+                chalBar.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
+                chalBar.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
+                chalBar.heightAnchor.constraint(equalToConstant: 8),
+            ])
+        }
+
+        // Prestige button
+        if state.level >= 20 {
+            let prestigeBtn = NSButton(title: "Rebirth (Prestige)", target: self, action: #selector(prestigeTapped))
+            prestigeBtn.isBordered = false
+            prestigeBtn.wantsLayer = true
+            prestigeBtn.layer?.backgroundColor = selectedRed.cgColor
+            prestigeBtn.layer?.cornerRadius = 8
+            prestigeBtn.contentTintColor = .white
+            prestigeBtn.font = NSFont.boldSystemFont(ofSize: 13)
+            prestigeBtn.translatesAutoresizingMaskIntoConstraints = false
+            stack.addArrangedSubview(prestigeBtn)
+            NSLayoutConstraint.activate([
+                prestigeBtn.leadingAnchor.constraint(equalTo: stack.leadingAnchor),
+                prestigeBtn.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
+                prestigeBtn.heightAnchor.constraint(equalToConstant: 36),
+            ])
+        }
+    }
+
+    private func buildStatsSection(title: String, rows: [(String, String)]) -> NSView {
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.25).cgColor
+        card.layer?.cornerRadius = 8
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = NSColor(white: 1, alpha: 0.15).cgColor
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let innerStack = NSStackView()
+        innerStack.orientation = .vertical
+        innerStack.spacing = 4
+        innerStack.alignment = .leading
+        innerStack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(innerStack)
+
+        NSLayoutConstraint.activate([
+            innerStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+            innerStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            innerStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            innerStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10),
+        ])
+
+        let titleLabel = Self.makeLabel(size: 12, bold: true, color: tabActive)
+        titleLabel.stringValue = title
+        innerStack.addArrangedSubview(titleLabel)
+
+        for (key, value) in rows {
+            let rowStack = NSStackView()
+            rowStack.orientation = .horizontal
+            rowStack.spacing = 4
+            rowStack.translatesAutoresizingMaskIntoConstraints = false
+
+            let keyLabel = Self.makeLabel(size: 11, bold: false, color: NSColor(white: 0.85, alpha: 1))
+            keyLabel.stringValue = key
+            keyLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+            let valLabel = Self.makeLabel(size: 11, bold: true, color: .white)
+            valLabel.stringValue = value
+            valLabel.alignment = .right
+            valLabel.setContentHuggingPriority(.required, for: .horizontal)
+            valLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+            rowStack.addArrangedSubview(keyLabel)
+            rowStack.addArrangedSubview(valLabel)
+
+            innerStack.addArrangedSubview(rowStack)
+            rowStack.leadingAnchor.constraint(equalTo: innerStack.leadingAnchor).isActive = true
+            rowStack.trailingAnchor.constraint(equalTo: innerStack.trailingAnchor).isActive = true
+        }
+
+        return card
+    }
+
+    // MARK: - Achievements Tab
+
+    private func buildAchievementsTab(in container: NSView, state: PetState) {
+        let padding: CGFloat = 16
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 6
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: padding),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: padding),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -padding),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -padding),
+        ])
+
+        let title = Self.makeLabel(size: 14, bold: true, color: .white)
+        let unlockedCount = state.achievements.filter { $0.unlocked }.count
+        title.stringValue = "Achievements (\(unlockedCount)/\(state.achievements.count))"
+        title.shadow = Self.dsTextShadow()
+        stack.addArrangedSubview(title)
+
+        // Sort: unlocked first, then by tier descending
+        let sorted = state.achievements.sorted { a, b in
             if a.unlocked != b.unlocked { return a.unlocked }
             return a.tier.rawValue > b.tier.rawValue
         }
-        for ach in sorted.prefix(5) {
-            let row = buildAchievementRow(ach)
-            achievementsStack.addArrangedSubview(row)
+
+        for ach in sorted {
+            let row = buildAchievementCard(ach)
+            stack.addArrangedSubview(row)
+            row.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
         }
     }
 
-    private func buildAchievementRow(_ ach: Achievement) -> NSView {
+    private func buildAchievementCard(_ ach: Achievement) -> NSView {
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.cornerRadius = 8
+        card.translatesAutoresizingMaskIntoConstraints = false
+
         let tierColor = ach.tier.color
-        let icon = Self.makeLabel(size: 12, bold: true, color: NSColor(
-            red: tierColor.r, green: tierColor.g, blue: tierColor.b, alpha: ach.unlocked ? 1 : 0.3
-        ))
+        let tierNSColor = NSColor(red: tierColor.r, green: tierColor.g, blue: tierColor.b, alpha: 1)
+
+        if ach.unlocked {
+            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.3).cgColor
+            card.layer?.borderWidth = 2
+            card.layer?.borderColor = tierNSColor.cgColor
+        } else {
+            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.15).cgColor
+            card.layer?.borderWidth = 1
+            card.layer?.borderColor = NSColor(white: 0.3, alpha: 0.5).cgColor
+        }
+
+        let icon = Self.makeLabel(size: 16, bold: true, color: tierNSColor.withAlphaComponent(ach.unlocked ? 1 : 0.3))
         icon.stringValue = ach.unlocked ? "\u{2605}" : "\u{2606}"
 
-        let name = Self.makeLabel(size: 10, bold: true, color: ach.unlocked ? .white : .gray)
-        name.stringValue = ach.name
-        name.alphaValue = ach.unlocked ? 1.0 : 0.5
+        let nameLabel = Self.makeLabel(size: 12, bold: true, color: ach.unlocked ? .white : NSColor(white: 0.5, alpha: 1))
+        nameLabel.stringValue = ach.name
 
-        let row = NSStackView(views: [icon, name])
-        row.orientation = .horizontal
-        row.spacing = 4
-        row.alignment = .centerY
-        row.translatesAutoresizingMaskIntoConstraints = false
-        return row
+        let descLabel = Self.makeLabel(size: 10, bold: false, color: ach.unlocked ? NSColor(white: 0.8, alpha: 1) : NSColor(white: 0.4, alpha: 1))
+        descLabel.stringValue = ach.description
+
+        let xpLabel = Self.makeLabel(size: 10, bold: true, color: tabActive.withAlphaComponent(ach.unlocked ? 1 : 0.4))
+        xpLabel.stringValue = "+\(ach.xpReward) XP"
+        xpLabel.alignment = .right
+        xpLabel.setContentHuggingPriority(.required, for: .horizontal)
+        xpLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let tierLabel = Self.makeLabel(size: 9, bold: true, color: tierNSColor.withAlphaComponent(ach.unlocked ? 1 : 0.4))
+        tierLabel.stringValue = ach.tier.name
+        tierLabel.alignment = .right
+        tierLabel.setContentHuggingPriority(.required, for: .horizontal)
+
+        let textStack = NSStackView()
+        textStack.orientation = .vertical
+        textStack.spacing = 1
+        textStack.alignment = .leading
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.addArrangedSubview(nameLabel)
+        textStack.addArrangedSubview(descLabel)
+
+        let rightStack = NSStackView()
+        rightStack.orientation = .vertical
+        rightStack.spacing = 1
+        rightStack.alignment = .trailing
+        rightStack.translatesAutoresizingMaskIntoConstraints = false
+        rightStack.addArrangedSubview(xpLabel)
+        rightStack.addArrangedSubview(tierLabel)
+
+        card.addSubview(icon)
+        card.addSubview(textStack)
+        card.addSubview(rightStack)
+
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 10),
+            icon.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+
+            textStack.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 6),
+            textStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 8),
+            textStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -8),
+
+            rightStack.leadingAnchor.constraint(greaterThanOrEqualTo: textStack.trailingAnchor, constant: 8),
+            rightStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
+            rightStack.centerYAnchor.constraint(equalTo: card.centerYAnchor),
+        ])
+
+        return card
     }
 
     // MARK: - Detail Navigation
 
-    private func showPokemonDetail(id: String) {
+    private func showPokemonDetail(id: String, showAddToParty: Bool) {
         guard let state = currentState,
               let scrollView = panelScrollView,
               let entry = PetCollection.allPokemon.first(where: { $0.id == id }) else { return }
@@ -735,43 +999,79 @@ final class PanelWindow: NSWindow {
 
         let detail = PokemonDetailView(entry: entry, unlocked: unlocked, shinyUnlocked: shinyUnlocked, currentLevel: state.level)
         detail.onBack = { [weak self] in
-            self?.showMainContent()
+            self?.showCurrentTab()
         }
         detail.onSelectPet = { [weak self] petId, shiny in
             self?.onPetSelected?(petId, shiny)
-            self?.showMainContent()
+            self?.showCurrentTab()
         }
-        detail.setAsContent(in: scrollView)
+
+        // If showing from pokemon tab and party isn't full and pokemon is unlocked and not in party
+        if showAddToParty && unlocked && !state.party.contains(id) && state.party.count < 6 {
+            // We'll add an "Add to Party" button via a wrapper
+            let wrapper = NSView()
+            wrapper.translatesAutoresizingMaskIntoConstraints = false
+
+            detail.translatesAutoresizingMaskIntoConstraints = false
+            wrapper.addSubview(detail)
+
+            let addBtn = NSButton(title: "Add to Party", target: self, action: #selector(addToPartyTapped(_:)))
+            addBtn.isBordered = false
+            addBtn.wantsLayer = true
+            addBtn.layer?.backgroundColor = tabActive.cgColor
+            addBtn.layer?.cornerRadius = 8
+            addBtn.contentTintColor = .black
+            addBtn.font = NSFont.boldSystemFont(ofSize: 13)
+            addBtn.translatesAutoresizingMaskIntoConstraints = false
+            addBtn.toolTip = id // store pokemon id
+            wrapper.addSubview(addBtn)
+
+            NSLayoutConstraint.activate([
+                detail.topAnchor.constraint(equalTo: wrapper.topAnchor),
+                detail.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
+                detail.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+
+                addBtn.topAnchor.constraint(equalTo: detail.bottomAnchor, constant: 8),
+                addBtn.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 16),
+                addBtn.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -16),
+                addBtn.heightAnchor.constraint(equalToConstant: 36),
+                addBtn.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -16),
+            ])
+
+            scrollView.documentView = wrapper
+            let clipView = scrollView.contentView
+            NSLayoutConstraint.activate([
+                wrapper.widthAnchor.constraint(equalTo: clipView.widthAnchor),
+            ])
+        } else {
+            detail.setAsContent(in: scrollView)
+        }
     }
 
-    private func showMainContent() {
-        guard let scrollView = panelScrollView, let main = mainContentView else { return }
-        scrollView.documentView = main
-        // Scroll to top
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            if let docView = scrollView.documentView {
-                scrollView.contentView.scroll(to: NSPoint(x: 0, y: docView.frame.height))
-                scrollView.reflectScrolledClipView(scrollView.contentView)
-            }
+    @objc private func addToPartyTapped(_ sender: NSButton) {
+        guard let id = sender.toolTip, !id.isEmpty, let state = currentState else { return }
+        if state.party.count < 6 && !state.party.contains(id) {
+            state.party.append(id)
+            state.save()
+            onPartyChanged?(state.party)
+            // Return to party tab
+            currentTab = .party
+            updateTabButtonStyles()
+            showCurrentTab()
         }
+    }
+
+    private func showCurrentTab() {
+        guard let scrollView = panelScrollView, let contentHolder = tabContentView else { return }
+        scrollView.documentView = contentHolder
+        rebuildTabContent()
+    }
+
+    @objc private func prestigeTapped() {
+        onPrestige?()
     }
 
     // MARK: - Helpers
-
-    private func pinToCard(_ view: NSView, card: NSView) {
-        NSLayoutConstraint.activate([
-            view.topAnchor.constraint(equalTo: card.topAnchor, constant: cardPadding),
-            view.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: cardPadding + 2),
-            view.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -(cardPadding + 2)),
-            view.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -cardPadding),
-        ])
-    }
-
-    private func dotSeparator() -> NSTextField {
-        let dot = Self.makeLabel(size: 11, bold: false, color: NSColor(white: 0.33, alpha: 1))
-        dot.stringValue = "\u{00B7}"
-        return dot
-    }
 
     static func makeLabel(size: CGFloat, bold: Bool, color: NSColor) -> NSTextField {
         let label = NSTextField(labelWithString: "")
@@ -785,6 +1085,14 @@ final class PanelWindow: NSWindow {
         return label
     }
 
+    private static func dsTextShadow() -> NSShadow {
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor(white: 0, alpha: 0.6)
+        shadow.shadowOffset = NSSize(width: 1, height: -1)
+        shadow.shadowBlurRadius = 0
+        return shadow
+    }
+
     private func formatNumber(_ n: Int) -> String {
         if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
         if n >= 1_000 { return String(format: "%.1fK", Double(n) / 1_000) }
@@ -792,90 +1100,15 @@ final class PanelWindow: NSWindow {
     }
 }
 
-// MARK: - PokemonCellView
-
-private final class PokemonCellView: NSView {
-    let pokemonId: String
-    var onTap: ((String) -> Void)?
-    weak var target: AnyObject?
-
-    init(entry: PokemonEntry, unlocked: Bool, isSelected: Bool, hasShinyUnlocked: Bool) {
-        self.pokemonId = entry.id
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 8
-
-        if unlocked {
-            layer?.backgroundColor = NSColor(white: 0.133, alpha: 1).cgColor // #222
-            if isSelected {
-                layer?.borderColor = NSColor(red: 0.29, green: 0.62, blue: 1.0, alpha: 1).cgColor
-                layer?.borderWidth = 2
-            } else {
-                layer?.borderColor = NSColor.clear.cgColor
-                layer?.borderWidth = 0
-            }
-
-            let imageView = NSImageView()
-            imageView.imageScaling = .scaleProportionallyUpOrDown
-            imageView.image = PetCollection.spriteImage(for: entry.id, shiny: false)
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(imageView)
-            NSLayoutConstraint.activate([
-                imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-                imageView.widthAnchor.constraint(equalToConstant: 30),
-                imageView.heightAnchor.constraint(equalToConstant: 30),
-            ])
-
-            if hasShinyUnlocked {
-                let sparkle = PanelWindow.makeLabel(size: 8, bold: false, color: .white)
-                sparkle.stringValue = "\u{2728}"
-                sparkle.translatesAutoresizingMaskIntoConstraints = false
-                addSubview(sparkle)
-                NSLayoutConstraint.activate([
-                    sparkle.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
-                    sparkle.topAnchor.constraint(equalTo: topAnchor, constant: 1),
-                ])
-            }
-        } else {
-            layer?.backgroundColor = NSColor(white: 0.067, alpha: 1).cgColor // #111
-
-            // Dark silhouette: load sprite but make it very dim
-            let imageView = NSImageView()
-            imageView.imageScaling = .scaleProportionallyUpOrDown
-            imageView.image = PetCollection.spriteImage(for: entry.id, shiny: false)
-            imageView.alphaValue = 0.15
-            imageView.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(imageView)
-            NSLayoutConstraint.activate([
-                imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-                imageView.widthAnchor.constraint(equalToConstant: 30),
-                imageView.heightAnchor.constraint(equalToConstant: 30),
-            ])
-        }
-
-        // Click handling
-        if unlocked {
-            let click = NSClickGestureRecognizer(target: self, action: #selector(cellTapped))
-            addGestureRecognizer(click)
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    @objc private func cellTapped() {
-        onTap?(pokemonId)
-    }
-}
-
 // MARK: - PanelBackgroundView
 
 private final class PanelBackgroundView: NSView {
     private let cornerRadius: CGFloat
+    private let fillColor: NSColor
 
-    init(cornerRadius: CGFloat) {
+    init(cornerRadius: CGFloat, fillColor: NSColor = .black) {
         self.cornerRadius = cornerRadius
+        self.fillColor = fillColor
         super.init(frame: .zero)
         wantsLayer = true
     }
@@ -886,31 +1119,10 @@ private final class PanelBackgroundView: NSView {
 
     override func updateLayer() {
         guard let layer = layer else { return }
-        layer.backgroundColor = NSColor.black.cgColor
+        layer.backgroundColor = fillColor.cgColor
         layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         layer.cornerRadius = cornerRadius
         layer.masksToBounds = true
-    }
-}
-
-// MARK: - SectionCard
-
-private final class SectionCard: NSView {
-    init() {
-        super.init(frame: .zero)
-        wantsLayer = true
-        translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = NSColor(red: 0.102, green: 0.102, blue: 0.102, alpha: 1).cgColor
-        layer?.cornerRadius = 10
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor(red: 0.165, green: 0.165, blue: 0.165, alpha: 1).cgColor
     }
 }
 

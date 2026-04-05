@@ -30,8 +30,8 @@ private class DraggablePetView: NSView {
     override func mouseDragged(with event: NSEvent) {
         let current = NSEvent.mouseLocation
         let dx = current.x - dragStart.x
-        let dy = current.y - dragStart.y
-        window?.setFrameOrigin(NSPoint(x: windowStart.x + dx, y: windowStart.y + dy))
+        // Lock Y to the menu bar — only allow horizontal dragging
+        window?.setFrameOrigin(NSPoint(x: windowStart.x + dx, y: windowStart.y))
     }
 
     override func mouseUp(with event: NSEvent) {

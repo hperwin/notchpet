@@ -46,6 +46,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelWindow.onPetSelected = { [weak self] petId, shiny in
             self?.selectPet(petId, shiny: shiny)
         }
+        panelWindow.onPartyChanged = { [weak self] newParty in
+            guard let self = self else { return }
+            self.petState.party = newParty
+            self.petState.save()
+            self.updatePartyStrip()
+        }
         panelWindow.refreshData(petState)
 
         // Interaction handler
