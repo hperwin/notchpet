@@ -3,12 +3,14 @@ import QuartzCore
 
 final class PartyTabView: DSTabView {
 
-    // DS color palette
     private static let skyBlue = NSColor(red: 0x78/255, green: 0xC8/255, blue: 0xF0/255, alpha: 1)
     private static let cardGreenTop = NSColor(red: 0x48/255, green: 0xB0/255, blue: 0x48/255, alpha: 1)
     private static let cardGreenBot = NSColor(red: 0x38/255, green: 0xA0/255, blue: 0x38/255, alpha: 1)
     private static let cardBorder = NSColor(red: 0x28/255, green: 0x68/255, blue: 0x28/255, alpha: 1)
     private static let hpGreen = NSColor(red: 0x48/255, green: 0xD0/255, blue: 0x48/255, alpha: 1)
+
+    // Content area: 520 x 380pt (macOS Y=0 at BOTTOM)
+    private static let contentH: CGFloat = 380
 
     init() {
         super.init(backgroundColor: PartyTabView.skyBlue)
@@ -16,226 +18,193 @@ final class PartyTabView: DSTabView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    // MARK: - Slot definitions
-
-    private struct SlotDef {
-        let x: CGFloat; let y: CGFloat; let w: CGFloat; let h: CGFloat
-        let spriteSize: CGFloat
-    }
-
-    private static let slots: [SlotDef] = [
-        // Slot 0 – lead, large card
-        SlotDef(x: 12,  y: 12,  w: 230, h: 240, spriteSize: 80),
-        // Slots 1-5 – smaller cards in 2-col layout
-        SlotDef(x: 254, y: 12,  w: 125, h: 72, spriteSize: 44),
-        SlotDef(x: 387, y: 12,  w: 125, h: 72, spriteSize: 44),
-        SlotDef(x: 254, y: 92,  w: 125, h: 72, spriteSize: 44),
-        SlotDef(x: 387, y: 92,  w: 125, h: 72, spriteSize: 44),
-        SlotDef(x: 254, y: 172, w: 125, h: 72, spriteSize: 44),
-    ]
-
-    // MARK: - Update
+    override var isFlipped: Bool { true }  // Use top-left origin like a normal UI
 
     override func update(state: PetState) {
         subviews.forEach { $0.removeFromSuperview() }
         clearHitRegions()
 
-        for (i, slot) in PartyTabView.slots.enumerated() {
-            let rect = NSRect(x: slot.x, y: slot.y, width: slot.w, height: slot.h)
+        // Layout: Lead card on left, 5 smaller cards stacked on the right
+        // Using flipped coordinates (Y=0 at TOP)
+        let pad: CGFloat = 10
+        let gap: CGFloat = 6
 
+        // Lead card — left side, tall
+        let leadW: CGFloat = 240
+        let leadH: CGFloat = 200
+        let leadRect = NSRect(x: pad, y: pad, width: leadW, height: leadH)
+
+        // Right column — 5 cards stacked vertically
+        let rightX = pad + leadW + gap
+        let rightW: CGFloat = 520 - rightX - pad  // ~258pt
+        let cardH: CGFloat = (leadH - gap * 2) / 3  // 3 rows, 2 in each except last
+        let halfW = (rightW - gap) / 2
+
+        // Row 0: cards 1, 2
+        let card1Rect = NSRect(x: rightX, y: pad, width: halfW, height: cardH)
+        let card2Rect = NSRect(x: rightX + halfW + gap, y: pad, width: halfW, height: cardH)
+        // Row 1: cards 3, 4
+        let card3Rect = NSRect(x: rightX, y: pad + cardH + gap, width: halfW, height: cardH)
+        let card4Rect = NSRect(x: rightX + halfW + gap, y: pad + cardH + gap, width: halfW, height: cardH)
+        // Row 2: card 5 (spans half or full)
+        let card5Rect = NSRect(x: rightX, y: pad + (cardH + gap) * 2, width: halfW, height: cardH)
+
+        let rects = [leadRect, card1Rect, card2Rect, card3Rect, card4Rect, card5Rect]
+
+        for (i, rect) in rects.enumerated() {
             if i < state.party.count {
-                let pokemonId = state.party[i]
-                let isLead = (i == 0)
-                addFilledCard(rect: rect, slot: slot, pokemonId: pokemonId, state: state, index: i, isLead: isLead)
+                addFilledCard(rect: rect, pokemonId: state.party[i], state: state, isLead: i == 0)
+                addHitRegion(HitRegion(id: "party_\(i)", rect: rect, action: .showDetail(pokemonId: state.party[i])))
             } else {
-                addEmptyCard(rect: rect, index: i)
+                addEmptyCard(rect: rect)
+                addHitRegion(HitRegion(id: "empty_\(i)", rect: rect, action: .switchToTab(1)))
             }
-
-            // Hit region for the card area
-            let action: TabAction = i < state.party.count
-                ? .showDetail(pokemonId: state.party[i])
-                : .switchToTab(1)
-            addHitRegion(HitRegion(id: i < state.party.count ? "party_\(i)" : "empty_\(i)", rect: rect, action: action))
         }
+
+        // Stats bar at bottom
+        let statsY = pad + leadH + gap
+        let statsLabel = DSTabView.dsLabel(
+            "Lv.\(state.level)  ·  \(state.foodEaten) berries fed  ·  \(state.totalWordsTyped) words",
+            size: 10, bold: false, color: NSColor.white.withAlphaComponent(0.8)
+        )
+        statsLabel.frame = NSRect(x: pad, y: statsY, width: 500, height: 16)
+        addSubview(statsLabel)
     }
 
     // MARK: - Filled Card
 
-    private func addFilledCard(rect: NSRect, slot: SlotDef, pokemonId: String, state: PetState, index: Int, isLead: Bool) {
+    private func addFilledCard(rect: NSRect, pokemonId: String, state: PetState, isLead: Bool) {
         let card = NSView(frame: rect)
         card.wantsLayer = true
-        card.layer?.cornerRadius = 10
+        card.layer?.cornerRadius = 8
 
-        // Green gradient background
         let gradient = CAGradientLayer()
         gradient.frame = CGRect(origin: .zero, size: rect.size)
         gradient.colors = [PartyTabView.cardGreenTop.cgColor, PartyTabView.cardGreenBot.cgColor]
         gradient.startPoint = CGPoint(x: 0.5, y: 0)
         gradient.endPoint = CGPoint(x: 0.5, y: 1)
-        gradient.cornerRadius = 10
+        gradient.cornerRadius = 8
         card.layer?.insertSublayer(gradient, at: 0)
-
-        // Border
         card.layer?.borderColor = PartyTabView.cardBorder.cgColor
         card.layer?.borderWidth = 2
-
         addSubview(card)
 
-        // Pokeball icon at top-left
-        let pokeball = PokeballView(frame: NSRect(x: rect.minX + 6, y: rect.minY + 6, width: 8, height: 8))
-        addSubview(pokeball)
+        // Pokeball at top-left of card
+        let pb = PokeballView(frame: NSRect(x: rect.minX + 4, y: rect.minY + 4, width: 12, height: 12))
+        addSubview(pb)
 
         let entry = PetCollection.allPokemon.first { $0.id == pokemonId }
         let isShiny = state.useShiny && state.unlockedShinies.contains(pokemonId)
 
         if isLead {
-            // Lead card: sprite centered, name/level/HP below
-            let sprite = DSTabView.dsSprite(for: pokemonId, shiny: isShiny, size: slot.spriteSize)
+            // Lead: sprite centered, name + level below
+            let spriteSize: CGFloat = 80
+            let spriteX = rect.midX - spriteSize / 2
+            let spriteY = rect.minY + 20
+            let sprite = makeSprite(pokemonId, shiny: isShiny, frame: NSRect(x: spriteX, y: spriteY, width: spriteSize, height: spriteSize))
             addSubview(sprite)
-            NSLayoutConstraint.activate([
-                sprite.centerXAnchor.constraint(equalTo: leadingAnchor, constant: rect.midX),
-                sprite.topAnchor.constraint(equalTo: topAnchor, constant: rect.minY + 24),
-            ])
 
-            let name = DSTabView.dsLabel(entry?.displayName ?? pokemonId, size: 14, bold: true)
+            let name = makeDSLabel(entry?.displayName ?? pokemonId, size: 14, bold: true)
+            name.frame = NSRect(x: rect.minX + 8, y: spriteY + spriteSize + 4, width: rect.width - 16, height: 18)
+            name.alignment = .center
             addSubview(name)
-            NSLayoutConstraint.activate([
-                name.centerXAnchor.constraint(equalTo: leadingAnchor, constant: rect.midX),
-                name.topAnchor.constraint(equalTo: topAnchor, constant: rect.minY + 112),
-            ])
 
-            let lvl = DSTabView.dsLabel("Lv.\(state.level)", size: 11, bold: false, color: .white)
+            let lvl = makeDSLabel("Lv.\(state.level)", size: 11)
+            lvl.frame = NSRect(x: rect.minX + 8, y: name.frame.maxY + 2, width: rect.width - 16, height: 14)
+            lvl.alignment = .center
             addSubview(lvl)
-            NSLayoutConstraint.activate([
-                lvl.centerXAnchor.constraint(equalTo: leadingAnchor, constant: rect.midX),
-                lvl.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 2),
-            ])
 
-            // HP bar centered below level
-            let barWidth: CGFloat = rect.width - 40
-            addHPBar(centerX: rect.midX, topAnchorView: lvl, barWidth: barWidth)
+            // HP bar
+            let barY = lvl.frame.maxY + 6
+            addHPBar(x: rect.minX + 20, y: barY, width: rect.width - 40, progress: state.levelProgress)
         } else {
-            // Small card: sprite on the left, text on the right
-            let sprite = DSTabView.dsSprite(for: pokemonId, shiny: isShiny, size: slot.spriteSize)
+            // Small card: sprite left, text right
+            let spriteSize: CGFloat = min(40, rect.height - 12)
+            let spriteX = rect.minX + 6
+            let spriteY = rect.minY + (rect.height - spriteSize) / 2
+            let sprite = makeSprite(pokemonId, shiny: isShiny, frame: NSRect(x: spriteX, y: spriteY, width: spriteSize, height: spriteSize))
             addSubview(sprite)
-            NSLayoutConstraint.activate([
-                sprite.leadingAnchor.constraint(equalTo: leadingAnchor, constant: rect.minX + 8),
-                sprite.centerYAnchor.constraint(equalTo: topAnchor, constant: rect.midY),
-            ])
 
-            let name = DSTabView.dsLabel(entry?.displayName ?? pokemonId, size: 12, bold: true)
+            let textX = spriteX + spriteSize + 6
+            let textW = rect.maxX - textX - 6
+            let name = makeDSLabel(entry?.displayName ?? pokemonId, size: 11, bold: true)
+            name.frame = NSRect(x: textX, y: rect.minY + 8, width: textW, height: 14)
             addSubview(name)
-            NSLayoutConstraint.activate([
-                name.leadingAnchor.constraint(equalTo: leadingAnchor, constant: rect.minX + slot.spriteSize + 14),
-                name.topAnchor.constraint(equalTo: topAnchor, constant: rect.minY + 10),
-            ])
 
-            let lvl = DSTabView.dsLabel("Lv.\(state.level)", size: 10, bold: false, color: .white)
+            let lvl = makeDSLabel("Lv.\(state.level)", size: 9)
+            lvl.frame = NSRect(x: textX, y: name.frame.maxY + 2, width: textW, height: 12)
             addSubview(lvl)
-            NSLayoutConstraint.activate([
-                lvl.leadingAnchor.constraint(equalTo: name.leadingAnchor),
-                lvl.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 2),
-            ])
 
-            let barWidth: CGFloat = rect.width - slot.spriteSize - 24
-            addHPBarAligned(leadingX: rect.minX + slot.spriteSize + 14, topAnchorView: lvl, barWidth: barWidth)
+            addHPBar(x: textX, y: lvl.frame.maxY + 4, width: textW, progress: state.levelProgress)
         }
     }
 
     // MARK: - Empty Card
 
-    private func addEmptyCard(rect: NSRect, index: Int) {
+    private func addEmptyCard(rect: NSRect) {
         let card = NSView(frame: rect)
         card.wantsLayer = true
-        card.layer?.cornerRadius = 10
-        card.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.2).cgColor
+        card.layer?.cornerRadius = 8
+        card.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.15).cgColor
 
-        // Dashed border
-        let borderLayer = CAShapeLayer()
-        let path = CGPath(roundedRect: CGRect(origin: .zero, size: rect.size), cornerWidth: 10, cornerHeight: 10, transform: nil)
-        borderLayer.path = path
-        borderLayer.fillColor = nil
-        borderLayer.strokeColor = NSColor.gray.cgColor
-        borderLayer.lineWidth = 2
-        borderLayer.lineDashPattern = [6, 4]
-        card.layer?.addSublayer(borderLayer)
-
+        let border = CAShapeLayer()
+        border.path = CGPath(roundedRect: CGRect(origin: .zero, size: rect.size), cornerWidth: 8, cornerHeight: 8, transform: nil)
+        border.fillColor = nil
+        border.strokeColor = NSColor.gray.withAlphaComponent(0.4).cgColor
+        border.lineWidth = 1.5
+        border.lineDashPattern = [5, 3]
+        card.layer?.addSublayer(border)
         addSubview(card)
 
-        let empty = DSTabView.dsLabel("Empty", size: 11, bold: false, color: NSColor.lightGray)
-        addSubview(empty)
-        NSLayoutConstraint.activate([
-            empty.centerXAnchor.constraint(equalTo: leadingAnchor, constant: rect.midX),
-            empty.centerYAnchor.constraint(equalTo: topAnchor, constant: rect.midY),
-        ])
+        let label = makeDSLabel("Empty", size: 10, bold: false, color: .lightGray)
+        label.frame = NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        label.alignment = .center
+        addSubview(label)
     }
 
-    // MARK: - HP Bar helpers
+    // MARK: - Helpers
 
-    private func addHPBar(centerX: CGFloat, topAnchorView: NSTextField, barWidth: CGFloat) {
-        let barHeight: CGFloat = 4
+    private func makeSprite(_ id: String, shiny: Bool, frame: NSRect) -> NSImageView {
+        let iv = NSImageView(frame: frame)
+        iv.image = PetCollection.spriteImage(for: id, shiny: shiny)
+        iv.imageScaling = .scaleProportionallyUpOrDown
+        iv.wantsLayer = true
+        iv.layer?.magnificationFilter = .nearest
+        return iv
+    }
 
-        let track = NSView()
+    private func makeDSLabel(_ text: String, size: CGFloat, bold: Bool = true, color: NSColor = .white) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.font = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
+        label.textColor = color
+        label.drawsBackground = false
+        label.isBordered = false
+        label.isEditable = false
+        label.shadow = DSTabView.dsShadow()
+        return label
+    }
+
+    private func addHPBar(x: CGFloat, y: CGFloat, width: CGFloat, progress: Double) {
+        let h: CGFloat = 4
+        let track = NSView(frame: NSRect(x: x, y: y, width: width, height: h))
         track.wantsLayer = true
         track.layer?.backgroundColor = NSColor(white: 0.15, alpha: 1).cgColor
         track.layer?.cornerRadius = 2
-        track.translatesAutoresizingMaskIntoConstraints = false
         addSubview(track)
-        NSLayoutConstraint.activate([
-            track.centerXAnchor.constraint(equalTo: leadingAnchor, constant: centerX),
-            track.topAnchor.constraint(equalTo: topAnchorView.bottomAnchor, constant: 6),
-            track.widthAnchor.constraint(equalToConstant: barWidth),
-            track.heightAnchor.constraint(equalToConstant: barHeight),
-        ])
 
-        let fill = NSView()
+        let fillW = width * CGFloat(min(max(progress, 0), 1))
+        let fill = NSView(frame: NSRect(x: x, y: y, width: fillW, height: h))
         fill.wantsLayer = true
         fill.layer?.backgroundColor = PartyTabView.hpGreen.cgColor
         fill.layer?.cornerRadius = 2
-        fill.translatesAutoresizingMaskIntoConstraints = false
         addSubview(fill)
-        NSLayoutConstraint.activate([
-            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
-            fill.topAnchor.constraint(equalTo: track.topAnchor),
-            fill.widthAnchor.constraint(equalTo: track.widthAnchor),
-            fill.heightAnchor.constraint(equalTo: track.heightAnchor),
-        ])
-    }
-
-    private func addHPBarAligned(leadingX: CGFloat, topAnchorView: NSTextField, barWidth: CGFloat) {
-        let barHeight: CGFloat = 4
-
-        let track = NSView()
-        track.wantsLayer = true
-        track.layer?.backgroundColor = NSColor(white: 0.15, alpha: 1).cgColor
-        track.layer?.cornerRadius = 2
-        track.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(track)
-        NSLayoutConstraint.activate([
-            track.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingX),
-            track.topAnchor.constraint(equalTo: topAnchorView.bottomAnchor, constant: 4),
-            track.widthAnchor.constraint(equalToConstant: barWidth),
-            track.heightAnchor.constraint(equalToConstant: barHeight),
-        ])
-
-        let fill = NSView()
-        fill.wantsLayer = true
-        fill.layer?.backgroundColor = PartyTabView.hpGreen.cgColor
-        fill.layer?.cornerRadius = 2
-        fill.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(fill)
-        NSLayoutConstraint.activate([
-            fill.leadingAnchor.constraint(equalTo: track.leadingAnchor),
-            fill.topAnchor.constraint(equalTo: track.topAnchor),
-            fill.widthAnchor.constraint(equalTo: track.widthAnchor),
-            fill.heightAnchor.constraint(equalTo: track.heightAnchor),
-        ])
     }
 }
 
-// MARK: - Pokeball Icon View
+// MARK: - Pokeball Icon
 
 private class PokeballView: NSView {
+    override var isFlipped: Bool { true }
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -243,33 +212,24 @@ private class PokeballView: NSView {
         layer?.masksToBounds = true
     }
     required init?(coder: NSCoder) { fatalError() }
-
     override func draw(_ dirtyRect: NSRect) {
         let b = bounds
-        let ctx = NSGraphicsContext.current!.cgContext
-        let radius = b.width / 2
-
-        // Red top half
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let r = b.width / 2
         ctx.setFillColor(NSColor.red.cgColor)
         ctx.fillEllipse(in: b)
-
-        // White bottom half
         ctx.setFillColor(NSColor.white.cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: b.width, height: radius))
-
-        // Black center line
+        ctx.fill(CGRect(x: 0, y: r, width: b.width, height: r))
         ctx.setStrokeColor(NSColor.black.cgColor)
         ctx.setLineWidth(1)
-        ctx.move(to: CGPoint(x: 0, y: radius))
-        ctx.addLine(to: CGPoint(x: b.width, y: radius))
+        ctx.move(to: CGPoint(x: 0, y: r))
+        ctx.addLine(to: CGPoint(x: b.width, y: r))
         ctx.strokePath()
-
-        // Center dot
-        let dotSize: CGFloat = 3
+        let ds: CGFloat = 3
         ctx.setFillColor(NSColor.white.cgColor)
-        ctx.fillEllipse(in: CGRect(x: radius - dotSize/2, y: radius - dotSize/2, width: dotSize, height: dotSize))
+        ctx.fillEllipse(in: CGRect(x: r - ds/2, y: r - ds/2, width: ds, height: ds))
         ctx.setStrokeColor(NSColor.black.cgColor)
         ctx.setLineWidth(0.5)
-        ctx.strokeEllipse(in: CGRect(x: radius - dotSize/2, y: radius - dotSize/2, width: dotSize, height: dotSize))
+        ctx.strokeEllipse(in: CGRect(x: r - ds/2, y: r - ds/2, width: ds, height: ds))
     }
 }

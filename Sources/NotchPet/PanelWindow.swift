@@ -276,33 +276,40 @@ final class PanelWindow: NSWindow {
     private func buildTabBar() -> NSView {
         let bar = NSView()
         bar.wantsLayer = true
-        bar.layer?.backgroundColor = tabBarBg.cgColor
+        bar.layer?.backgroundColor = NSColor(red: 0x18/255, green: 0x18/255, blue: 0x20/255, alpha: 1).cgColor
         bar.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = NSStackView()
         stack.orientation = .horizontal
         stack.distribution = .fillEqually
-        stack.spacing = 4
+        stack.spacing = 0
         stack.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: bar.topAnchor, constant: 4),
-            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
-            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -4),
+            stack.topAnchor.constraint(equalTo: bar.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
+        let icons = ["Party", "Box", "Trainer", "Medals"]
         tabButtons.removeAll()
-        for (index, title) in Self.tabTitles.enumerated() {
+        for (index, title) in icons.enumerated() {
             let btn = NSButton(title: title, target: self, action: #selector(tabTapped(_:)))
             btn.tag = index
             btn.isBordered = false
             btn.wantsLayer = true
-            btn.font = NSFont.boldSystemFont(ofSize: 11)
+            btn.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
             btn.contentTintColor = .white
-            btn.layer?.cornerRadius = 6
             btn.translatesAutoresizingMaskIntoConstraints = false
+
+            // Top border line for active tab
+            let topLine = CALayer()
+            topLine.frame = CGRect(x: 0, y: 0, width: 130, height: 2)
+            topLine.name = "topLine"
+            btn.layer?.addSublayer(topLine)
+
             stack.addArrangedSubview(btn)
             tabButtons.append(btn)
         }
@@ -312,10 +319,19 @@ final class PanelWindow: NSWindow {
     }
 
     private func updateTabBarAppearance() {
+        let activeColor = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
+        let inactiveColor = NSColor(red: 0x30/255, green: 0x30/255, blue: 0x38/255, alpha: 1)
+
         for btn in tabButtons {
             let isActive = btn.tag == currentTabIndex
-            btn.layer?.backgroundColor = isActive ? tabActive.cgColor : tabInactive.cgColor
-            btn.contentTintColor = isActive ? .black : .white
+            btn.layer?.backgroundColor = isActive
+                ? NSColor(red: 0x28/255, green: 0x28/255, blue: 0x30/255, alpha: 1).cgColor
+                : NSColor.clear.cgColor
+            btn.contentTintColor = isActive ? activeColor : NSColor(white: 0.55, alpha: 1)
+
+            if let topLine = btn.layer?.sublayers?.first(where: { $0.name == "topLine" }) {
+                topLine.backgroundColor = isActive ? activeColor.cgColor : NSColor.clear.cgColor
+            }
         }
     }
 
