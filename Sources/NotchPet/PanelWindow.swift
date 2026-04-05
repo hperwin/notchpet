@@ -185,7 +185,7 @@ final class PanelWindow: NSWindow {
     // MARK: - Build UI
 
     private func buildUI() {
-        let bg = PanelBackgroundView(cornerRadius: bottomCornerRadius, fillColor: skyBlue)
+        let bg = PanelBackgroundView(cornerRadius: bottomCornerRadius, fillColor: .black)
         contentView = bg
 
         let mainContainer = NSView()
@@ -322,21 +322,25 @@ final class PanelWindow: NSWindow {
         case .achievements:
             buildAchievementsTab(in: contentHolder, state: state)
         }
-
-        // Scroll to top
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            if let scrollView = self?.panelScrollView,
-               let docView = scrollView.documentView {
-                let topPoint = NSPoint(x: 0, y: docView.frame.height)
-                scrollView.contentView.scroll(to: topPoint)
-                scrollView.reflectScrolledClipView(scrollView.contentView)
-            }
-        }
     }
 
     // MARK: - Party Tab
 
     private func buildPartyTab(in container: NSView, state: PetState) {
+        let bgImageView = NSImageView()
+        bgImageView.imageScaling = .scaleAxesIndependently
+        bgImageView.translatesAutoresizingMaskIntoConstraints = false
+        if let url = Bundle.module.url(forResource: "bg_party", withExtension: "png") {
+            bgImageView.image = NSImage(contentsOf: url)
+        }
+        container.addSubview(bgImageView)
+        NSLayoutConstraint.activate([
+            bgImageView.topAnchor.constraint(equalTo: container.topAnchor),
+            bgImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bgImageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bgImageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
         let padding: CGFloat = 12
         let spacing: CGFloat = 8
         let columnSpacing: CGFloat = 8
@@ -419,7 +423,7 @@ final class PanelWindow: NSWindow {
         if let id = pokemonId, let entry = PetCollection.allPokemon.first(where: { $0.id == id }) {
             // Filled slot - green gradient card
             let gradientLayer = CAGradientLayer()
-            gradientLayer.colors = [cardGreenTop.cgColor, cardGreenBot.cgColor]
+            gradientLayer.colors = [cardGreenTop.withAlphaComponent(0.6).cgColor, cardGreenBot.withAlphaComponent(0.6).cgColor]
             gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)
             gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)
             gradientLayer.cornerRadius = 8
@@ -559,6 +563,20 @@ final class PanelWindow: NSWindow {
     // MARK: - Pokemon Tab (Collection Grid)
 
     private func buildPokemonTab(in container: NSView, state: PetState) {
+        let bgImageView = NSImageView()
+        bgImageView.imageScaling = .scaleAxesIndependently
+        bgImageView.translatesAutoresizingMaskIntoConstraints = false
+        if let url = Bundle.module.url(forResource: "bg_collection", withExtension: "png") {
+            bgImageView.image = NSImage(contentsOf: url)
+        }
+        container.addSubview(bgImageView)
+        NSLayoutConstraint.activate([
+            bgImageView.topAnchor.constraint(equalTo: container.topAnchor),
+            bgImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bgImageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bgImageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
         let padding: CGFloat = 12
         let catalog = PetCollection.catalog(for: state.level)
         let cols = 5
@@ -624,7 +642,7 @@ final class PanelWindow: NSWindow {
         if item.unlocked {
             // Green card for unlocked
             let gradient = CAGradientLayer()
-            gradient.colors = [cardGreenTop.cgColor, cardGreenBot.cgColor]
+            gradient.colors = [cardGreenTop.withAlphaComponent(0.6).cgColor, cardGreenBot.withAlphaComponent(0.6).cgColor]
             gradient.cornerRadius = 8
             gradient.borderWidth = isSelected ? 3 : 2
             gradient.borderColor = isSelected ? selectedRed.cgColor : cardBorderGreen.cgColor
@@ -718,6 +736,20 @@ final class PanelWindow: NSWindow {
     // MARK: - Stats Tab
 
     private func buildStatsTab(in container: NSView, state: PetState) {
+        let bgImageView = NSImageView()
+        bgImageView.imageScaling = .scaleAxesIndependently
+        bgImageView.translatesAutoresizingMaskIntoConstraints = false
+        if let url = Bundle.module.url(forResource: "bg_stats", withExtension: "png") {
+            bgImageView.image = NSImage(contentsOf: url)
+        }
+        container.addSubview(bgImageView)
+        NSLayoutConstraint.activate([
+            bgImageView.topAnchor.constraint(equalTo: container.topAnchor),
+            bgImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bgImageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bgImageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
         let padding: CGFloat = 16
 
         let stack = NSStackView()
@@ -821,10 +853,10 @@ final class PanelWindow: NSWindow {
     private func buildStatsSection(title: String, rows: [(String, String)]) -> NSView {
         let card = NSView()
         card.wantsLayer = true
-        card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.25).cgColor
+        card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.4).cgColor
         card.layer?.cornerRadius = 8
         card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor(white: 1, alpha: 0.15).cgColor
+        card.layer?.borderColor = NSColor(white: 1, alpha: 0.2).cgColor
         card.translatesAutoresizingMaskIntoConstraints = false
 
         let innerStack = NSStackView()
@@ -875,6 +907,20 @@ final class PanelWindow: NSWindow {
     // MARK: - Achievements Tab
 
     private func buildAchievementsTab(in container: NSView, state: PetState) {
+        let bgImageView = NSImageView()
+        bgImageView.imageScaling = .scaleAxesIndependently
+        bgImageView.translatesAutoresizingMaskIntoConstraints = false
+        if let url = Bundle.module.url(forResource: "bg_achievements", withExtension: "png") {
+            bgImageView.image = NSImage(contentsOf: url)
+        }
+        container.addSubview(bgImageView)
+        NSLayoutConstraint.activate([
+            bgImageView.topAnchor.constraint(equalTo: container.topAnchor),
+            bgImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bgImageView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            bgImageView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
         let padding: CGFloat = 16
 
         let stack = NSStackView()
@@ -921,11 +967,11 @@ final class PanelWindow: NSWindow {
         let tierNSColor = NSColor(red: tierColor.r, green: tierColor.g, blue: tierColor.b, alpha: 1)
 
         if ach.unlocked {
-            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.3).cgColor
+            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.4).cgColor
             card.layer?.borderWidth = 2
             card.layer?.borderColor = tierNSColor.cgColor
         } else {
-            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.15).cgColor
+            card.layer?.backgroundColor = NSColor(white: 0, alpha: 0.2).cgColor
             card.layer?.borderWidth = 1
             card.layer?.borderColor = NSColor(white: 0.3, alpha: 0.5).cgColor
         }

@@ -117,9 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         keyboardMonitor.onWPMUpdate = { [weak self] wpm in
             self?.petState.currentWPM = wpm
-            if self?.panelWindow.isOpen == true {
-                self?.panelWindow.refreshData(self!.petState)
-            }
+            // Don't refresh panel on every WPM update — causes scroll glitch
         }
         keyboardMonitor.onTypingStateChanged = { [weak self] state in
             self?.handleTypingStateChange(state)
