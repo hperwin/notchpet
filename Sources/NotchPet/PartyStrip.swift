@@ -4,7 +4,7 @@ import AppKit
 
 private final class PartyStripView: NSView {
     static let slotCount = 6
-    static let slotSize: CGFloat = 24
+    static let slotSize: CGFloat = 22
 
     var onSlotTapped: ((Int) -> Void)?
 
@@ -20,6 +20,10 @@ private final class PartyStripView: NSView {
         }
 
         super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.masksToBounds = true
+
         addSubview(backgroundImageView)
 
         let totalSlotWidth = CGFloat(Self.slotCount) * Self.slotSize

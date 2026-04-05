@@ -102,8 +102,8 @@ final class PetView: NSView {
     }
 
     private func scheduleNextBurst() {
+        guard !usingPokemonSprite else { return }  // Don't animate frames when showing a Pokemon
         idleTimer?.invalidate()
-        // Wait 4-8 seconds before doing the next animation burst
         let wait = Double.random(in: 4.0...8.0)
         idleTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
             self?.playOneBurst()
@@ -217,7 +217,10 @@ final class PetView: NSView {
     // MARK: - Pokemon sprite mode
 
     /// Switch to displaying a static Pokemon sprite instead of animation frames
+    private var usingPokemonSprite = false
+
     func setPokemonSprite(_ id: String, shiny: Bool = false) {
+        usingPokemonSprite = true
         stopAllAnimations()
         if let img = PetCollection.spriteImage(for: id, shiny: shiny) {
             imageView.image = img

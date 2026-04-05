@@ -124,6 +124,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Preferences.shared.isAutoLaunchEnabled = true
         }
 
+        // Dev: unlock requested Pokemon
+        if petState.level < 40 {
+            petState.level = 40
+        }
+        if !petState.unlockedShinies.contains("charizard") {
+            petState.unlockedShinies.append("charizard")
+        }
+        petState.party = ["leafeon", "rayquaza", "charizard", "umbreon", "dragonite", "pikachu"]
+        petState.save()
+        updatePartyStrip()
+
         petWindow.orderFront(nil)
     }
 
@@ -281,9 +292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let stage = petState.evolutionStage
         let petView = petWindow.petView
 
-        let scale = stage.spriteScale
-        petView.imageView.layer?.transform = CATransform3DMakeScale(scale, scale, 1)
-
+        // Don't scale Pokemon sprites — they're already proper size
+        // Only apply glow at higher evolution stages
         if let glow = stage.glowColor {
             petView.imageView.layer?.shadowColor = CGColor(
                 red: glow.r, green: glow.g, blue: glow.b, alpha: 1.0
@@ -323,9 +333,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Party Strip
 
     private func updatePartyStrip() {
-        // Auto-fill party with first 6 unlocked Pokemon
-        let unlocked = PetCollection.unlockedPets(for: petState.level).prefix(6).map(\.id)
-        petState.party = Array(unlocked)
+        // Use saved party, or auto-fill if empty
+        if petState.party.isEmpty {
+            let unlocked = PetCollection.unlockedPets(for: petState.level).prefix(6).map(\.id)
+            petState.party = Array(unlocked)
+        }
         partyStrip.updateParty(petState.party, level: petState.level)
     }
 
