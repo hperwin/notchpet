@@ -3,6 +3,8 @@ import QuartzCore
 
 final class FoodSpawner {
     var onFoodEaten: ((String) -> Void)?
+    var onPartyPokemonFed: ((String, String) -> Void)?  // (pokemonId, berryName)
+    var partyFramesProvider: (() -> [(id: String, frame: NSRect)])?
 
     private var foodWindow: NSWindow?
     private var spawnTimer: Timer?
@@ -118,11 +120,25 @@ final class FoodSpawner {
         guard let window = foodWindow else { return }
         isDragging = false
 
+        let foodFrame = window.frame
+
+        // Check pet window first
         let petFrame = petWindowFrame()
-        if window.frame.intersects(petFrame) {
+        if foodFrame.intersects(petFrame) {
             eatBerry()
+            return
         }
-        // If not overlapping, berry stays where it was dropped
+
+        // Check party Pokemon
+        if let partyFrames = partyFramesProvider?() {
+            for (pokemonId, pFrame) in partyFrames {
+                if foodFrame.intersects(pFrame) {
+                    feedPartyPokemon(pokemonId: pokemonId)
+                    return
+                }
+            }
+        }
+        // If not overlapping anything, berry stays where it was dropped
     }
 
     fileprivate func handleDragStarted() {
@@ -154,6 +170,34 @@ final class FoodSpawner {
         }, completionHandler: { [weak self] in
             self?.removeFoodWindow()
             self?.onFoodEaten?(name)
+            self?.scheduleNextSpawn()
+        })
+    }
+
+    private func feedPartyPokemon(pokemonId: String) {
+        guard let window = foodWindow, let name = currentBerryName else { return }
+        despawnTimer?.invalidate()
+        despawnTimer = nil
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.3
+            context.allowsImplicitAnimation = true
+            window.animator().alphaValue = 0
+            if let view = window.contentView {
+                let midX = view.bounds.midX
+                let midY = view.bounds.midY
+                view.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+                view.layer?.position = CGPoint(x: midX, y: midY)
+
+                let scaleUp = CABasicAnimation(keyPath: "transform.scale")
+                scaleUp.fromValue = 1.0
+                scaleUp.toValue = 1.5
+                scaleUp.duration = 0.3
+                view.layer?.add(scaleUp, forKey: "eatScale")
+            }
+        }, completionHandler: { [weak self] in
+            self?.removeFoodWindow()
+            self?.onPartyPokemonFed?(pokemonId, name)
             self?.scheduleNextSpawn()
         })
     }

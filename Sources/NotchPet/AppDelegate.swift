@@ -70,7 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Party strip — shows party Pokemon to the right of the notch
         partyStrip = PartyStrip()
         partyStrip.onPokemonTapped = { [weak self] id in
-            self?.selectPet(id, shiny: false)
+            // Tapping a party Pokemon opens the panel to that Pokemon's detail
+            self?.togglePanel()
         }
         updatePartyStrip()
         partyStrip.show()
@@ -91,6 +92,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         })
         foodSpawner.onFoodEaten = { [weak self] berryName in
             self?.handleFoodEaten(berryName)
+        }
+        foodSpawner.partyFramesProvider = { [weak self] in
+            self?.partyStrip.allPokemonFrames() ?? []
+        }
+        foodSpawner.onPartyPokemonFed = { [weak self] pokemonId, berryName in
+            self?.handlePartyPokemonFed(pokemonId: pokemonId, berryName: berryName)
         }
         foodSpawner.start()
 
@@ -185,6 +192,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Refresh panel if open
+        if panelWindow.isOpen {
+            panelWindow.refreshData(petState)
+        }
+    }
+
+    // MARK: - Party Pokemon Feeding
+
+    private func handlePartyPokemonFed(pokemonId: String, berryName: String) {
+        petState.foodEaten += 1
+
+        // Give XP for feeding
+        let baseXP = Int.random(in: 15...30)
+        let totalXP = Int(Double(baseXP) * petState.totalMultiplier)
+        petState.xp += totalXP
+        petState.totalXPEarned += totalXP
+        petState.save()
+
+        // Check for level up
+        gameSystems.checkAfterXPGain()
+
+        NSLog("NotchPet: Fed \(pokemonId) a \(berryName) for \(totalXP) XP")
+
         if panelWindow.isOpen {
             panelWindow.refreshData(petState)
         }
