@@ -51,24 +51,29 @@ class DSTabView: NSView, DSTab {
 
     // MARK: - Init
 
-    init(backgroundImage: String) {
+    init(backgroundImage: String? = nil, backgroundColor: NSColor = .clear) {
         super.init(frame: .zero)
         wantsLayer = true
 
-        // Set up background image
-        bgImageView.imageScaling = .scaleAxesIndependently
-        bgImageView.translatesAutoresizingMaskIntoConstraints = false
-        if let url = Bundle.module.url(forResource: backgroundImage, withExtension: "png"),
-           let img = NSImage(contentsOf: url) {
-            bgImageView.image = img
+        if let bgName = backgroundImage {
+            // Set up background image
+            bgImageView.imageScaling = .scaleAxesIndependently
+            bgImageView.translatesAutoresizingMaskIntoConstraints = false
+            if let url = Bundle.module.url(forResource: bgName, withExtension: "png"),
+               let img = NSImage(contentsOf: url) {
+                bgImageView.image = img
+            }
+            addSubview(bgImageView)
+            NSLayoutConstraint.activate([
+                bgImageView.topAnchor.constraint(equalTo: topAnchor),
+                bgImageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+                bgImageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+                bgImageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            ])
+        } else {
+            // Solid background color — no image
+            layer?.backgroundColor = backgroundColor.cgColor
         }
-        addSubview(bgImageView)
-        NSLayoutConstraint.activate([
-            bgImageView.topAnchor.constraint(equalTo: topAnchor),
-            bgImageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            bgImageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            bgImageView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
 
         // Highlight layer for hover
         let hl = CAShapeLayer()

@@ -2,8 +2,20 @@ import AppKit
 
 final class StatsTabView: DSTabView {
 
+    // DS palette
+    private static let darkBlue = NSColor(red: 0x28/255, green: 0x38/255, blue: 0x58/255, alpha: 1)
+    private static let darkerBlue = NSColor(red: 0x1a/255, green: 0x28/255, blue: 0x48/255, alpha: 1)
+    private static let cream = NSColor(red: 0xF5/255, green: 0xF0/255, blue: 0xE0/255, alpha: 1)
+    private static let gold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
+    private static let fieldGray = NSColor(red: 0x33/255, green: 0x33/255, blue: 0x33/255, alpha: 1)
+    private static let prestigeRed = NSColor(red: 0xD0/255, green: 0x20/255, blue: 0x20/255, alpha: 1)
+
+    // Card geometry
+    private static let cardOuter = NSRect(x: 10, y: 10, width: 500, height: 360)
+    private static let cardInner = NSRect(x: 18, y: 18, width: 484, height: 344)
+
     init() {
-        super.init(backgroundImage: "bg_stats")
+        super.init(backgroundColor: StatsTabView.darkBlue)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -30,126 +42,233 @@ final class StatsTabView: DSTabView {
         return NSColor(red: c.r, green: c.g, blue: c.b, alpha: 1)
     }
 
+    /// Place a label at an absolute position inside the view (frame-based, no Auto Layout).
+    private func placeLabel(_ text: String, x: CGFloat, y: CGFloat,
+                            size: CGFloat, bold: Bool = true,
+                            color: NSColor = .black, shadow: Bool = false) {
+        let label = NSTextField(labelWithString: text)
+        label.font = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
+        label.textColor = color
+        label.drawsBackground = false
+        label.isBordered = false
+        label.isEditable = false
+        label.sizeToFit()
+        if shadow {
+            label.shadow = DSTabView.dsShadow()
+        }
+        // NSView y-axis is bottom-up; convert top-down y
+        let flippedY = bounds.height - y - label.frame.height
+        label.frame.origin = NSPoint(x: x, y: flippedY)
+        addSubview(label)
+    }
+
+    // MARK: - Drawing
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+        let outer = StatsTabView.cardOuter
+        let inner = StatsTabView.cardInner
+
+        // 1. Outer decorative border (darker blue)
+        ctx.setFillColor(StatsTabView.darkerBlue.cgColor)
+        let outerPath = CGPath(roundedRect: outer, cornerWidth: 8, cornerHeight: 8, transform: nil)
+        ctx.addPath(outerPath)
+        ctx.fillPath()
+
+        // 2. Gold inner line (inset 2pt from outer)
+        let goldRect = outer.insetBy(dx: 2, dy: 2)
+        ctx.setStrokeColor(StatsTabView.gold.cgColor)
+        ctx.setLineWidth(2)
+        let goldPath = CGPath(roundedRect: goldRect, cornerWidth: 7, cornerHeight: 7, transform: nil)
+        ctx.addPath(goldPath)
+        ctx.strokePath()
+
+        // 3. Cream card fill
+        ctx.setFillColor(StatsTabView.cream.cgColor)
+        let innerPath = CGPath(roundedRect: inner, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        ctx.addPath(innerPath)
+        ctx.fillPath()
+
+        // 4. Thin separator lines on cream card
+        ctx.setStrokeColor(NSColor(red: 0xC0/255, green: 0xB8/255, blue: 0xA0/255, alpha: 1).cgColor)
+        ctx.setLineWidth(1)
+
+        // Line below sprite/name area (y=108 in top-down)
+        let sepY1 = bounds.height - 108
+        ctx.move(to: CGPoint(x: inner.minX + 8, y: sepY1))
+        ctx.addLine(to: CGPoint(x: inner.maxX - 8, y: sepY1))
+        ctx.strokePath()
+
+        // Line above badges area (y=220 in top-down)
+        let sepY2 = bounds.height - 220
+        ctx.move(to: CGPoint(x: inner.minX + 8, y: sepY2))
+        ctx.addLine(to: CGPoint(x: inner.maxX - 8, y: sepY2))
+        ctx.strokePath()
+
+        // Line above footer (y=310 in top-down)
+        let sepY3 = bounds.height - 310
+        ctx.move(to: CGPoint(x: inner.minX + 8, y: sepY3))
+        ctx.addLine(to: CGPoint(x: inner.maxX - 8, y: sepY3))
+        ctx.strokePath()
+    }
+
     // MARK: - Update
 
     override func update(state: PetState) {
-        // Remove old content but keep bg image at index 0
-        subviews.dropFirst().forEach { $0.removeFromSuperview() }
+        // Remove all subviews (no bg image to preserve)
+        subviews.forEach { $0.removeFromSuperview() }
         clearHitRegions()
+        needsDisplay = true  // trigger draw(_:)
 
-        // --- Avatar area (top-left) ---
+        let fg = StatsTabView.fieldGray
+
+        // --- Sprite (top-left inside card) ---
         let shiny = state.useShiny && state.unlockedShinies.contains(state.selectedPet)
-        let sprite = DSTabView.dsSprite(for: state.selectedPet, shiny: shiny, size: 50)
-        addSubview(sprite)
-        NSLayoutConstraint.activate([
-            sprite.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
-            sprite.topAnchor.constraint(equalTo: topAnchor, constant: 25),
-        ])
+        let spriteView = NSImageView()
+        spriteView.image = PetCollection.spriteImage(for: state.selectedPet, shiny: shiny)
+        spriteView.imageScaling = .scaleProportionallyUpOrDown
+        spriteView.wantsLayer = true
+        spriteView.layer?.magnificationFilter = .nearest
+        let spriteY = bounds.height - 28 - 60  // top-down y=28, h=60
+        spriteView.frame = NSRect(x: 28, y: spriteY, width: 60, height: 60)
+        addSubview(spriteView)
 
-        // --- NAME field ---
+        // --- NAME ---
         let entry = PetCollection.allPokemon.first { $0.id == state.selectedPet }
-        let nameLabel = DSTabView.dsLabel(entry?.displayName ?? state.selectedPet, size: 14, bold: true)
-        addSubview(nameLabel)
-        NSLayoutConstraint.activate([
-            nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 160),
-            nameLabel.topAnchor.constraint(equalTo: topAnchor, constant: 40),
-        ])
+        placeLabel("NAME:", x: 100, y: 30, size: 11, bold: false, color: fg)
+        placeLabel(entry?.displayName ?? state.selectedPet, x: 160, y: 28, size: 14, bold: true, color: .black)
 
-        // --- ID No. field ---
+        // --- ID No. ---
         let idStr = String(format: "#%05d", state.prestigeCount)
-        let idLabel = DSTabView.dsLabel(idStr, size: 11, bold: false, color: .white)
-        addSubview(idLabel)
-        NSLayoutConstraint.activate([
-            idLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 160),
-            idLabel.topAnchor.constraint(equalTo: topAnchor, constant: 80),
-        ])
+        placeLabel("ID No.", x: 100, y: 54, size: 11, bold: false, color: fg)
+        placeLabel(idStr, x: 160, y: 54, size: 11, bold: true, color: .black)
 
-        // --- MONEY field (Total XP) ---
-        let moneyLabel = DSTabView.dsLabel(formatXP(state.totalXPEarned), size: 11, bold: true)
-        addSubview(moneyLabel)
-        NSLayoutConstraint.activate([
-            moneyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 100),
-            moneyLabel.topAnchor.constraint(equalTo: topAnchor, constant: 130),
-        ])
+        // --- MONEY (Total XP) ---
+        placeLabel("MONEY:", x: 100, y: 78, size: 11, bold: false, color: fg)
+        placeLabel("\(formatXP(state.totalXPEarned)) XP", x: 170, y: 78, size: 11, bold: true, color: .black)
 
-        // --- POKeDEX field (unlocked achievements / 30) ---
-        let unlockedCount = state.achievements.filter { $0.unlocked }.count
-        let dexLabel = DSTabView.dsLabel("\(unlockedCount) / 30", size: 11, bold: true)
-        addSubview(dexLabel)
-        NSLayoutConstraint.activate([
-            dexLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 200),
-            dexLabel.topAnchor.constraint(equalTo: topAnchor, constant: 130),
-        ])
+        // --- POKeDEX ---
+        let unlockedPets = PetCollection.unlockedPets(for: state.level).count
+        let totalPets = PetCollection.allPokemon.count
+        placeLabel("POK\u{00E9}DEX:", x: 280, y: 78, size: 11, bold: false, color: fg)
+        placeLabel("\(unlockedPets)/\(totalPets)", x: 360, y: 78, size: 11, bold: true, color: .black)
 
-        // --- SCORE field ---
-        let scoreLabel = DSTabView.dsLabel("Level \(state.level)", size: 11, bold: true)
-        addSubview(scoreLabel)
-        NSLayoutConstraint.activate([
-            scoreLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 100),
-            scoreLabel.topAnchor.constraint(equalTo: topAnchor, constant: 165),
-        ])
+        // --- SCORE (Level) ---
+        placeLabel("SCORE:", x: 28, y: 120, size: 11, bold: false, color: fg)
+        placeLabel("Level \(state.level)", x: 100, y: 120, size: 11, bold: true, color: .black)
 
-        // --- TIME field ---
-        let timeLabel = DSTabView.dsLabel(formatTime(minutes: state.sessionActiveMinutes), size: 11, bold: false, color: .white)
-        addSubview(timeLabel)
-        NSLayoutConstraint.activate([
-            timeLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 100),
-            timeLabel.topAnchor.constraint(equalTo: topAnchor, constant: 195),
-        ])
+        // --- TIME ---
+        placeLabel("TIME:", x: 28, y: 148, size: 11, bold: false, color: fg)
+        placeLabel(formatTime(minutes: state.sessionActiveMinutes), x: 100, y: 148, size: 11, bold: true, color: .black)
 
-        // --- ADVENTURE STARTED (evolution stage) ---
-        let stageLabel = DSTabView.dsLabel(state.evolutionStage.name, size: 11, bold: false, color: .white)
-        addSubview(stageLabel)
-        NSLayoutConstraint.activate([
-            stageLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 100),
-            stageLabel.topAnchor.constraint(equalTo: topAnchor, constant: 220),
-        ])
+        // --- STARTED (evolution stage) ---
+        placeLabel("STARTED:", x: 28, y: 176, size: 11, bold: false, color: fg)
+        placeLabel(state.evolutionStage.name, x: 110, y: 176, size: 11, bold: true, color: .black)
 
-        // --- GYM BADGES grid (2×4, right side) ---
-        let badgeOriginX: CGFloat = 340
-        let badgeOriginY: CGFloat = 90
-        let cellSize: CGFloat = 35
+        // --- Right column stats ---
+        placeLabel("WPM:", x: 280, y: 120, size: 11, bold: false, color: fg)
+        placeLabel("\(Int(state.currentWPM))", x: 330, y: 120, size: 11, bold: true, color: .black)
+
+        placeLabel("FED:", x: 280, y: 148, size: 11, bold: false, color: fg)
+        placeLabel("\(state.foodEaten) berries", x: 330, y: 148, size: 11, bold: true, color: .black)
+
+        placeLabel("STREAK:", x: 280, y: 176, size: 11, bold: false, color: fg)
+        placeLabel("\(state.typingStreak)d", x: 350, y: 176, size: 11, bold: true, color: .black)
+
+        // --- BADGES grid (2 rows x 4 cols) ---
+        placeLabel("BADGES:", x: 28, y: 232, size: 11, bold: false, color: fg)
+
+        let badgeStartX: CGFloat = 110
+        let badgeStartY: CGFloat = 228
+        let badgeSize: CGFloat = 24
+        let badgeGap: CGFloat = 6
 
         for i in 0..<8 {
-            let col = i % 2
-            let row = i / 2
-            let cx = badgeOriginX + CGFloat(col) * cellSize + cellSize / 2
-            let cy = badgeOriginY + CGFloat(row) * cellSize + cellSize / 2
+            let col = i % 4
+            let row = i / 4
+            let bx = badgeStartX + CGFloat(col) * (badgeSize + badgeGap)
+            let by = badgeStartY + CGFloat(row) * (badgeSize + badgeGap + 2)
+            let flippedY = bounds.height - by - badgeSize
+
+            let badgeView = NSView(frame: NSRect(x: bx, y: flippedY, width: badgeSize, height: badgeSize))
+            badgeView.wantsLayer = true
+            badgeView.layer?.cornerRadius = 4
 
             if i < state.achievements.count {
                 let ach = state.achievements[i]
-                let symbol = ach.unlocked ? "\u{2605}" : "\u{25CB}"  // ★ or ○
-                let color = ach.unlocked ? tierColor(ach.tier) : NSColor.gray
-                let fontSize: CGFloat = ach.unlocked ? 18 : 14
-
-                let badge = DSTabView.dsLabel(symbol, size: fontSize, bold: true, color: color)
-                addSubview(badge)
-                NSLayoutConstraint.activate([
-                    badge.centerXAnchor.constraint(equalTo: leadingAnchor, constant: cx),
-                    badge.centerYAnchor.constraint(equalTo: topAnchor, constant: cy),
-                ])
+                if ach.unlocked {
+                    badgeView.layer?.backgroundColor = StatsTabView.gold.cgColor
+                    let star = NSTextField(labelWithString: "\u{2605}")
+                    star.font = NSFont.boldSystemFont(ofSize: 14)
+                    star.textColor = .white
+                    star.drawsBackground = false
+                    star.isBordered = false
+                    star.isEditable = false
+                    star.sizeToFit()
+                    star.frame.origin = NSPoint(
+                        x: (badgeSize - star.frame.width) / 2,
+                        y: (badgeSize - star.frame.height) / 2
+                    )
+                    badgeView.addSubview(star)
+                } else {
+                    badgeView.layer?.backgroundColor = NSColor(red: 0.25, green: 0.25, blue: 0.25, alpha: 1).cgColor
+                    badgeView.layer?.borderWidth = 1
+                    badgeView.layer?.borderColor = NSColor.gray.cgColor
+                    let circle = NSTextField(labelWithString: "\u{25CB}")
+                    circle.font = NSFont.systemFont(ofSize: 12)
+                    circle.textColor = .gray
+                    circle.drawsBackground = false
+                    circle.isBordered = false
+                    circle.isEditable = false
+                    circle.sizeToFit()
+                    circle.frame.origin = NSPoint(
+                        x: (badgeSize - circle.frame.width) / 2,
+                        y: (badgeSize - circle.frame.height) / 2
+                    )
+                    badgeView.addSubview(circle)
+                }
+            } else {
+                badgeView.layer?.backgroundColor = NSColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 0.3).cgColor
             }
+
+            addSubview(badgeView)
         }
 
-        // --- SIGNATURE area (streak + WPM) ---
-        let sigText = "\(state.typingStreak)d streak \u{00B7} \(Int(state.currentWPM)) WPM"
-        let sigLabel = DSTabView.dsLabel(sigText, size: 10, bold: false, color: .white)
-        addSubview(sigLabel)
-        NSLayoutConstraint.activate([
-            sigLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 340),
-            sigLabel.topAnchor.constraint(equalTo: topAnchor, constant: 220),
-        ])
+        // --- Footer: streak, WPM, fed summary ---
+        let footerText = "\(state.typingStreak)d \u{00B7} \(Int(state.currentWPM)) WPM \u{00B7} \(state.foodEaten) berries"
+        placeLabel(footerText, x: 28, y: 320, size: 10, bold: false, color: fg)
 
-        // --- Prestige button (bottom nav bar) ---
+        // --- Prestige button ---
         if state.level >= 20 {
-            let prestigeLabel = DSTabView.dsLabel("PRESTIGE \u{2605}", size: 12, bold: true, color: DSTabView.hoverGold)
-            addSubview(prestigeLabel)
-            NSLayoutConstraint.activate([
-                prestigeLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-                prestigeLabel.topAnchor.constraint(equalTo: topAnchor, constant: 350),
-            ])
+            let btnW: CGFloat = 160
+            let btnH: CGFloat = 28
+            let btnX = (bounds.width - btnW) / 2
+            let btnTopY: CGFloat = 340  // top-down
+            let btnFlippedY = bounds.height - btnTopY - btnH
 
-            let prestigeRect = NSRect(x: 0, y: 340, width: 520, height: 40)
+            let btnView = NSView(frame: NSRect(x: btnX, y: btnFlippedY, width: btnW, height: btnH))
+            btnView.wantsLayer = true
+            btnView.layer?.backgroundColor = StatsTabView.prestigeRed.cgColor
+            btnView.layer?.cornerRadius = 4
+
+            let btnLabel = NSTextField(labelWithString: "PRESTIGE \u{2605}")
+            btnLabel.font = NSFont.boldSystemFont(ofSize: 12)
+            btnLabel.textColor = StatsTabView.gold
+            btnLabel.drawsBackground = false
+            btnLabel.isBordered = false
+            btnLabel.isEditable = false
+            btnLabel.sizeToFit()
+            btnLabel.frame.origin = NSPoint(
+                x: (btnW - btnLabel.frame.width) / 2,
+                y: (btnH - btnLabel.frame.height) / 2
+            )
+            btnView.addSubview(btnLabel)
+            addSubview(btnView)
+
+            let prestigeRect = NSRect(x: btnX, y: btnFlippedY, width: btnW, height: btnH)
             addHitRegion(HitRegion(id: "prestige", rect: prestigeRect, action: .prestige))
         }
     }
