@@ -18,7 +18,7 @@ final class StatsTabView: DSTabView {
     private static let padding: CGFloat = 10
     private static let cardRadius: CGFloat = 10
     private static let cardBorderWidth: CGFloat = 1
-    private static let topRowHeight: CGFloat = 140
+    private static let topRowHeight: CGFloat = 170
     private static let bottomCardHeight: CGFloat = 208
     private static let cardGap: CGFloat = 10
 
@@ -143,7 +143,7 @@ final class StatsTabView: DSTabView {
 
         // Mini list: per-pokemon food counts
         var foodY: CGFloat = 78
-        for pokemonId in state.party.prefix(4) {
+        for pokemonId in state.party.prefix(6) {
             let inst = state.pokemonInstances[pokemonId]
             let name = PetCollection.entry(for: pokemonId)?.displayName ?? pokemonId
             let fed = inst?.foodEaten ?? 0
