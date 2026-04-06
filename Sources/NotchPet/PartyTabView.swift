@@ -64,7 +64,7 @@ final class PartyTabView: DSTabView {
         // Stats bar at bottom
         let statsY = pad + leadH + gap
         let statsLabel = DSTabView.dsLabel(
-            "Lv.\(state.level)  ·  \(state.foodEaten) berries fed  ·  \(state.totalWordsTyped) words",
+            "\(state.totalFoodEaten) berries fed  ·  \(state.totalWordsTyped) words",
             size: 10, bold: false, color: NSColor.white.withAlphaComponent(0.8)
         )
         statsLabel.frame = NSRect(x: pad, y: statsY, width: 500, height: 16)
@@ -96,6 +96,10 @@ final class PartyTabView: DSTabView {
         let entry = PetCollection.allPokemon.first { $0.id == pokemonId }
         let isShiny = state.useShiny && state.unlockedShinies.contains(pokemonId)
 
+        let instance = state.pokemonInstances[pokemonId]
+        let pokemonLevel = instance?.level ?? 1
+        let pokemonProgress = instance?.levelProgress ?? 0
+
         if isLead {
             // Lead: sprite centered, name + level below
             let spriteSize: CGFloat = 80
@@ -109,14 +113,14 @@ final class PartyTabView: DSTabView {
             name.alignment = .center
             addSubview(name)
 
-            let lvl = makeDSLabel("Lv.\(state.level)", size: 11)
+            let lvl = makeDSLabel("Lv.\(pokemonLevel)", size: 11)
             lvl.frame = NSRect(x: rect.minX + 8, y: name.frame.maxY + 2, width: rect.width - 16, height: 14)
             lvl.alignment = .center
             addSubview(lvl)
 
             // HP bar
             let barY = lvl.frame.maxY + 6
-            addHPBar(x: rect.minX + 20, y: barY, width: rect.width - 40, progress: state.levelProgress)
+            addHPBar(x: rect.minX + 20, y: barY, width: rect.width - 40, progress: pokemonProgress)
         } else {
             // Small card: sprite left, text right
             let spriteSize: CGFloat = min(40, rect.height - 12)
@@ -131,11 +135,11 @@ final class PartyTabView: DSTabView {
             name.frame = NSRect(x: textX, y: rect.minY + 8, width: textW, height: 14)
             addSubview(name)
 
-            let lvl = makeDSLabel("Lv.\(state.level)", size: 9)
+            let lvl = makeDSLabel("Lv.\(pokemonLevel)", size: 9)
             lvl.frame = NSRect(x: textX, y: name.frame.maxY + 2, width: textW, height: 12)
             addSubview(lvl)
 
-            addHPBar(x: textX, y: lvl.frame.maxY + 4, width: textW, progress: state.levelProgress)
+            addHPBar(x: textX, y: lvl.frame.maxY + 4, width: textW, progress: pokemonProgress)
         }
     }
 

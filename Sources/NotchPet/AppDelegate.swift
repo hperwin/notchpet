@@ -34,23 +34,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petView.homeX = PetWindow.notchLeftOffset - PetWindow.petSize - 4
         petView.setPetLocalX(petView.homeX)
 
-        // Show selected Pokemon sprite + start occasional bouncing
-        loadSelectedPet()
+        // Show lead party member sprite + start occasional bouncing
+        loadLeadPokemon()
         petView.startRandomBouncing()
 
         // Panel window
         panelWindow = PanelWindow(contentRect: .zero)
-        panelWindow.onPrestige = { [weak self] in
-            self?.handlePrestige()
-        }
-        panelWindow.onPetSelected = { [weak self] petId, shiny in
-            self?.selectPet(petId, shiny: shiny)
-        }
         panelWindow.onPartyChanged = { [weak self] newParty in
             guard let self = self else { return }
             self.petState.party = newParty
             self.petState.save()
             self.updatePartyStrip()
+            self.loadLeadPokemon()
         }
         panelWindow.refreshData(petState)
 
@@ -76,8 +71,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Party strip — shows party Pokemon to the right of the notch
         partyStrip = PartyStrip()
         partyStrip.onPokemonTapped = { [weak self] id in
-            // Tapping a party Pokemon opens the panel to that Pokemon's detail
-            self?.togglePanel()
+            guard let self = self else { return }
+            if !self.panelWindow.isOpen {
+                self.panelWindow.refreshData(self.petState)
+                self.panelWindow.toggle(from: self.petWindow.frame)
+            }
+            self.panelWindow.showDetailForPokemon(id)
         }
         updatePartyStrip()
         partyStrip.show()
@@ -135,92 +134,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Preferences.shared.isAutoLaunchEnabled = true
         }
 
-        // Dev: unlock requested Pokemon
-        if petState.level < 40 {
-            petState.level = 40
-        }
-        if !petState.unlockedShinies.contains("charizard") {
-            petState.unlockedShinies.append("charizard")
-        }
-        petState.party = ["leafeon", "rayquaza", "charizard", "umbreon", "dragonite", "pikachu"]
-        petState.save()
-        updatePartyStrip()
-
         petWindow.orderFront(nil)
     }
 
-    // MARK: - Pet Selection
+    // MARK: - Lead Pokemon
 
-    private func loadSelectedPet() {
-        petWindow.petView.setPokemonSprite(petState.selectedPet, shiny: petState.useShiny)
-    }
-
-    private func selectPet(_ id: String, shiny: Bool) {
-        petState.selectedPet = id
-        petState.useShiny = shiny
-        petState.save()
-        petWindow.petView.setPokemonSprite(id, shiny: shiny)
-        updatePetVisuals()
+    private func loadLeadPokemon() {
+        petWindow.petView.setPokemonSprite(petState.party.first ?? "leafeon")
     }
 
     // MARK: - Food
 
     private func handleFoodEaten(_ berryName: String) {
-        petState.foodEaten += 1
-
-        // Give XP for feeding (15-30 XP per berry)
+        guard let leadId = petState.party.first,
+              var instance = petState.pokemonInstances[leadId] else { return }
+        instance.foodEaten += 1
         let baseXP = Int.random(in: 15...30)
-        let totalXP = Int(Double(baseXP) * petState.totalMultiplier)
-        petState.xp += totalXP
-        petState.totalXPEarned += totalXP
+        let leveledUp = instance.addXP(baseXP)
+        petState.pokemonInstances[leadId] = instance
         petState.save()
-
-        // Play eat animation
         petWindow.petView.playEatAnimation()
-
-        // Check for level up etc
-        gameSystems.checkAfterXPGain()
-
-        // 3% chance to unlock a shiny on feeding
-        if petState.unlockedShinies.count < PetCollection.allPokemon.count {
-            if Double.random(in: 0...1) < 0.03 {
-                let candidates = PetCollection.unlockedPets(for: petState.level)
-                    .filter { !petState.unlockedShinies.contains($0.id) && $0.hasShiny }
-                if let pick = candidates.randomElement() {
-                    petState.unlockedShinies.append(pick.id)
-                    petState.save()
-                    NSLog("NotchPet: Shiny unlocked: \(pick.displayName)!")
-                    animatePetCelebration()
-                }
-            }
-        }
-
-        // Refresh panel if open
-        if panelWindow.isOpen {
-            panelWindow.refreshData(petState)
-        }
+        if leveledUp { animatePetCelebration() }
+        if panelWindow.isOpen { panelWindow.refreshData(petState) }
     }
 
     // MARK: - Party Pokemon Feeding
 
     private func handlePartyPokemonFed(pokemonId: String, berryName: String) {
-        petState.foodEaten += 1
-
-        // Give XP for feeding
+        guard var instance = petState.pokemonInstances[pokemonId] else { return }
+        instance.foodEaten += 1
         let baseXP = Int.random(in: 15...30)
-        let totalXP = Int(Double(baseXP) * petState.totalMultiplier)
-        petState.xp += totalXP
-        petState.totalXPEarned += totalXP
+        let leveledUp = instance.addXP(baseXP)
+        petState.pokemonInstances[pokemonId] = instance
         petState.save()
-
-        // Check for level up
-        gameSystems.checkAfterXPGain()
-
-        NSLog("NotchPet: Fed \(pokemonId) a \(berryName) for \(totalXP) XP")
-
-        if panelWindow.isOpen {
-            panelWindow.refreshData(petState)
-        }
+        if leveledUp { animatePetCelebration() }
+        if panelWindow.isOpen { panelWindow.refreshData(petState) }
     }
 
     // MARK: - Panel
@@ -238,29 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch event {
         case .levelUp(let level):
             animatePetCelebration()
-            updatePetVisuals()
             updatePartyStrip()
             NSLog("NotchPet: Level up! Now level \(level)")
-
-        case .evolved(let stage):
-            updatePetVisuals()
-            animatePetCelebration()
-            NSLog("NotchPet: Evolved to \(stage.name)!")
 
         case .achievementUnlocked(let achievement):
             NSLog("NotchPet: Achievement unlocked: \(achievement.name)")
             animatePetCelebration()
 
-        case .prestigeComplete(let count):
-            updatePetVisuals()
-            NSLog("NotchPet: Prestige #\(count)!")
-
         case .cosmeticRolled(let cosmetic):
             NSLog("NotchPet: Got cosmetic: \(cosmetic.name) (\(cosmetic.rarity.name))")
-
-        case .mutationOccurred(let color):
-            NSLog("NotchPet: Mutation! Color: \(color)")
-            updatePetVisuals()
 
         case .challengeComplete(let challenge):
             NSLog("NotchPet: Challenge complete: \(challenge.description)")
@@ -268,6 +202,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .streakUpdate(let streak):
             NSLog("NotchPet: Typing streak: \(streak) days")
+
+        default:
+            break
         }
 
         if panelWindow.isOpen {
@@ -322,26 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Pet Visuals
 
     private func updatePetVisuals() {
-        let stage = petState.evolutionStage
-        let petView = petWindow.petView
-
-        // Don't scale Pokemon sprites — they're already proper size
-        // Only apply glow at higher evolution stages
-        if let glow = stage.glowColor {
-            petView.imageView.layer?.shadowColor = CGColor(
-                red: glow.r, green: glow.g, blue: glow.b, alpha: 1.0
-            )
-            petView.imageView.layer?.shadowRadius = 6
-            petView.imageView.layer?.shadowOpacity = 0.8
-            petView.imageView.layer?.shadowOffset = .zero
-        } else {
-            petView.imageView.layer?.shadowOpacity = 0
-        }
-
-        if let hexColor = petState.mutationColor {
-            let tint = colorFromHex(hexColor)
-            petView.imageView.contentTintColor = tint
-        }
+        loadLeadPokemon()
     }
 
     private func animatePetCelebration() {
@@ -353,43 +271,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petView.imageView.layer?.add(celebrate, forKey: "celebrate")
     }
 
-    // MARK: - Prestige
-
-    private func handlePrestige() {
-        let success = gameSystems.prestige()
-        if success {
-            updatePetVisuals()
-            panelWindow.refreshData(petState)
-        }
-    }
-
     // MARK: - Party Strip
 
     private func updatePartyStrip() {
-        // Use saved party, or auto-fill if empty
-        if petState.party.isEmpty {
-            let unlocked = PetCollection.unlockedPets(for: petState.level).prefix(6).map(\.id)
-            petState.party = Array(unlocked)
-        }
-        partyStrip.updateParty(petState.party, level: petState.level)
+        partyStrip.updateParty(petState.party, level: petState.highestLevel)
     }
 
     // MARK: - Helpers
 
     private func resetPosition() {
         petWindow.petView.setPetLocalX(petWindow.petView.homeX)
-    }
-
-    private func colorFromHex(_ hex: String) -> NSColor {
-        var hexStr = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if hexStr.hasPrefix("#") { hexStr.removeFirst() }
-        guard hexStr.count == 6, let value = UInt64(hexStr, radix: 16) else {
-            return .white
-        }
-        let r = CGFloat((value >> 16) & 0xFF) / 255.0
-        let g = CGFloat((value >> 8) & 0xFF) / 255.0
-        let b = CGFloat(value & 0xFF) / 255.0
-        return NSColor(red: r, green: g, blue: b, alpha: 1.0)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

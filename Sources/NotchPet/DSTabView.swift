@@ -6,10 +6,8 @@ import QuartzCore
 enum TabAction {
     case showDetail(pokemonId: String)
     case switchToTab(Int)
-    case selectPet(id: String, shiny: Bool)
     case addToParty(id: String)
     case removeFromParty(id: String)
-    case prestige
 }
 
 // MARK: - DS Tab Protocol

@@ -206,19 +206,10 @@ final class FoodSpawner {
 
     private func berrySpawnPoint(foodSize: CGFloat) -> NSPoint {
         let screen = NSScreen.main ?? NSScreen.screens[0]
-
-        if let auxRight = screen.auxiliaryTopRightArea {
-            let maxSpawnWidth = min(auxRight.width, 200)
-            let x = auxRight.origin.x + CGFloat.random(in: 0...(maxSpawnWidth - foodSize))
-            let y = auxRight.origin.y + (auxRight.height - foodSize) / 2
-            return NSPoint(x: x, y: y)
-        }
-
-        // Fallback: right of notch estimate
-        let notchRight: CGFloat = 848
-        let x = notchRight + CGFloat.random(in: 10...200)
-        let menuBarTop = screen.frame.maxY
-        let y = menuBarTop - 32 + (32 - foodSize) / 2
+        let visible = screen.visibleFrame  // excludes menu bar and dock
+        let margin: CGFloat = 40
+        let x = visible.origin.x + CGFloat.random(in: margin...(visible.width - foodSize - margin))
+        let y = visible.origin.y + CGFloat.random(in: margin...(visible.height - foodSize - margin))
         return NSPoint(x: x, y: y)
     }
 

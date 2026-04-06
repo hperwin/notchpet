@@ -8,7 +8,7 @@ final class StatsTabView: DSTabView {
     private static let cream = NSColor(red: 0xF5/255, green: 0xF0/255, blue: 0xE0/255, alpha: 1)
     private static let gold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
     private static let fieldGray = NSColor(red: 0x33/255, green: 0x33/255, blue: 0x33/255, alpha: 1)
-    private static let prestigeRed = NSColor(red: 0xD0/255, green: 0x20/255, blue: 0x20/255, alpha: 1)
+
 
     // Card geometry
     private static let cardOuter = NSRect(x: 10, y: 10, width: 500, height: 360)
@@ -126,9 +126,10 @@ final class StatsTabView: DSTabView {
         let fg = StatsTabView.fieldGray
 
         // --- Sprite (top-left inside card) ---
-        let shiny = state.useShiny && state.unlockedShinies.contains(state.selectedPet)
+        let leadId = state.party.first ?? "leafeon"
+        let shiny = state.useShiny && state.unlockedShinies.contains(leadId)
         let spriteView = NSImageView()
-        spriteView.image = PetCollection.spriteImage(for: state.selectedPet, shiny: shiny)
+        spriteView.image = PetCollection.spriteImage(for: leadId, shiny: shiny)
         spriteView.imageScaling = .scaleProportionallyUpOrDown
         spriteView.wantsLayer = true
         spriteView.layer?.magnificationFilter = .nearest
@@ -137,43 +138,42 @@ final class StatsTabView: DSTabView {
         addSubview(spriteView)
 
         // --- NAME ---
-        let entry = PetCollection.allPokemon.first { $0.id == state.selectedPet }
+        let entry = PetCollection.allPokemon.first { $0.id == leadId }
         placeLabel("NAME:", x: 100, y: 30, size: 11, bold: false, color: fg)
-        placeLabel(entry?.displayName ?? state.selectedPet, x: 160, y: 28, size: 14, bold: true, color: .black)
+        placeLabel(entry?.displayName ?? leadId, x: 160, y: 28, size: 14, bold: true, color: .black)
 
-        // --- ID No. ---
-        let idStr = String(format: "#%05d", state.prestigeCount)
-        placeLabel("ID No.", x: 100, y: 54, size: 11, bold: false, color: fg)
-        placeLabel(idStr, x: 160, y: 54, size: 11, bold: true, color: .black)
+        // --- PARTY ---
+        placeLabel("PARTY:", x: 100, y: 54, size: 11, bold: false, color: fg)
+        placeLabel("\(state.party.count)/6", x: 160, y: 54, size: 11, bold: true, color: .black)
 
         // --- MONEY (Total XP) ---
         placeLabel("MONEY:", x: 100, y: 78, size: 11, bold: false, color: fg)
         placeLabel("\(formatXP(state.totalXPEarned)) XP", x: 170, y: 78, size: 11, bold: true, color: .black)
 
         // --- POKeDEX ---
-        let unlockedPets = PetCollection.unlockedPets(for: state.level).count
+        let ownedPets = state.pokemonInstances.count
         let totalPets = PetCollection.allPokemon.count
         placeLabel("POK\u{00E9}DEX:", x: 280, y: 78, size: 11, bold: false, color: fg)
-        placeLabel("\(unlockedPets)/\(totalPets)", x: 360, y: 78, size: 11, bold: true, color: .black)
+        placeLabel("\(ownedPets)/\(totalPets)", x: 360, y: 78, size: 11, bold: true, color: .black)
 
         // --- SCORE (Level) ---
         placeLabel("SCORE:", x: 28, y: 120, size: 11, bold: false, color: fg)
-        placeLabel("Level \(state.level)", x: 100, y: 120, size: 11, bold: true, color: .black)
+        placeLabel("Level \(state.highestLevel)", x: 100, y: 120, size: 11, bold: true, color: .black)
 
         // --- TIME ---
         placeLabel("TIME:", x: 28, y: 148, size: 11, bold: false, color: fg)
         placeLabel(formatTime(minutes: state.sessionActiveMinutes), x: 100, y: 148, size: 11, bold: true, color: .black)
 
-        // --- STARTED (evolution stage) ---
-        placeLabel("STARTED:", x: 28, y: 176, size: 11, bold: false, color: fg)
-        placeLabel(state.evolutionStage.name, x: 110, y: 176, size: 11, bold: true, color: .black)
+        // --- PARTY SIZE ---
+        placeLabel("PARTY:", x: 28, y: 176, size: 11, bold: false, color: fg)
+        placeLabel("\(state.party.count) Pokemon", x: 110, y: 176, size: 11, bold: true, color: .black)
 
         // --- Right column stats ---
         placeLabel("WPM:", x: 280, y: 120, size: 11, bold: false, color: fg)
         placeLabel("\(Int(state.currentWPM))", x: 330, y: 120, size: 11, bold: true, color: .black)
 
         placeLabel("FED:", x: 280, y: 148, size: 11, bold: false, color: fg)
-        placeLabel("\(state.foodEaten) berries", x: 330, y: 148, size: 11, bold: true, color: .black)
+        placeLabel("\(state.totalFoodEaten) berries", x: 330, y: 148, size: 11, bold: true, color: .black)
 
         placeLabel("STREAK:", x: 280, y: 176, size: 11, bold: false, color: fg)
         placeLabel("\(state.typingStreak)d", x: 350, y: 176, size: 11, bold: true, color: .black)
@@ -238,38 +238,7 @@ final class StatsTabView: DSTabView {
         }
 
         // --- Footer: streak, WPM, fed summary ---
-        let footerText = "\(state.typingStreak)d \u{00B7} \(Int(state.currentWPM)) WPM \u{00B7} \(state.foodEaten) berries"
+        let footerText = "\(state.typingStreak)d \u{00B7} \(Int(state.currentWPM)) WPM \u{00B7} \(state.totalFoodEaten) berries"
         placeLabel(footerText, x: 28, y: 320, size: 10, bold: false, color: fg)
-
-        // --- Prestige button ---
-        if state.level >= 20 {
-            let btnW: CGFloat = 160
-            let btnH: CGFloat = 28
-            let btnX = (bounds.width - btnW) / 2
-            let btnTopY: CGFloat = 340  // top-down
-            let btnFlippedY = bounds.height - btnTopY - btnH
-
-            let btnView = NSView(frame: NSRect(x: btnX, y: btnFlippedY, width: btnW, height: btnH))
-            btnView.wantsLayer = true
-            btnView.layer?.backgroundColor = StatsTabView.prestigeRed.cgColor
-            btnView.layer?.cornerRadius = 4
-
-            let btnLabel = NSTextField(labelWithString: "PRESTIGE \u{2605}")
-            btnLabel.font = NSFont.boldSystemFont(ofSize: 12)
-            btnLabel.textColor = StatsTabView.gold
-            btnLabel.drawsBackground = false
-            btnLabel.isBordered = false
-            btnLabel.isEditable = false
-            btnLabel.sizeToFit()
-            btnLabel.frame.origin = NSPoint(
-                x: (btnW - btnLabel.frame.width) / 2,
-                y: (btnH - btnLabel.frame.height) / 2
-            )
-            btnView.addSubview(btnLabel)
-            addSubview(btnView)
-
-            let prestigeRect = NSRect(x: btnX, y: btnFlippedY, width: btnW, height: btnH)
-            addHitRegion(HitRegion(id: "prestige", rect: prestigeRect, action: .prestige))
-        }
     }
 }

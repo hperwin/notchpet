@@ -6,7 +6,6 @@ final class CollectionTabView: DSTabView {
     private static let bgGray = NSColor(red: 0xE8/255, green: 0xE8/255, blue: 0xE8/255, alpha: 1)
     private static let cellBg = NSColor(red: 0xF0/255, green: 0xF0/255, blue: 0xF0/255, alpha: 1)
     private static let cellBorder = NSColor(red: 0xCC/255, green: 0xCC/255, blue: 0xCC/255, alpha: 1)
-    private static let lockedBg = NSColor(red: 0xDD/255, green: 0xDD/255, blue: 0xDD/255, alpha: 1)
     private static let goldDot = NSColor(red: 1.0, green: 0.85, blue: 0.0, alpha: 1)
 
     private static let columns = 6
@@ -49,12 +48,12 @@ final class CollectionTabView: DSTabView {
         contentView.subviews.forEach { $0.removeFromSuperview() }
         clearHitRegions()
 
-        let catalog = PetCollection.catalog(for: state.level)
+        let allPokemon = PetCollection.allPokemon
         let partySet = Set(state.party)
-        let totalRows = (catalog.count + Self.columns - 1) / Self.columns
+        let totalRows = (allPokemon.count + Self.columns - 1) / Self.columns
 
         // Title
-        let title = makeLabel("Collection (\(catalog.filter { $0.unlocked }.count)/\(catalog.count))", size: 13, bold: true, color: NSColor(white: 0.2, alpha: 1))
+        let title = makeLabel("Box (\(allPokemon.count))", size: 13, bold: true, color: NSColor(white: 0.2, alpha: 1))
         title.frame = NSRect(x: 0, y: 8, width: 520, height: 18)
         title.alignment = .center
         contentView.addSubview(title)
@@ -63,7 +62,7 @@ final class CollectionTabView: DSTabView {
         let contentHeight = Self.padTop + CGFloat(totalRows) * (Self.cellSize + Self.cellGap) + 10
         contentView.frame = NSRect(x: 0, y: 0, width: 520, height: max(contentHeight, 380))
 
-        for (index, item) in catalog.enumerated() {
+        for (index, entry) in allPokemon.enumerated() {
             let col = index % Self.columns
             let row = index / Self.columns
 
@@ -71,17 +70,15 @@ final class CollectionTabView: DSTabView {
             let cellY = Self.padTop + CGFloat(row) * (Self.cellSize + Self.cellGap)
             let cellRect = NSRect(x: cellX, y: cellY, width: Self.cellSize, height: Self.cellSize)
 
-            let entry = item.entry
-            let unlocked = item.unlocked
-            let isSelected = entry.id == state.selectedPet
+            let isInParty = partySet.contains(entry.id)
 
             // Cell background
             let cell = NSView(frame: cellRect)
             cell.wantsLayer = true
             cell.layer?.cornerRadius = 6
-            cell.layer?.backgroundColor = unlocked ? Self.cellBg.cgColor : Self.lockedBg.cgColor
-            cell.layer?.borderColor = isSelected ? DSTabView.selectedRed.cgColor : Self.cellBorder.cgColor
-            cell.layer?.borderWidth = isSelected ? 2.5 : 1
+            cell.layer?.backgroundColor = Self.cellBg.cgColor
+            cell.layer?.borderColor = isInParty ? DSTabView.selectedRed.cgColor : Self.cellBorder.cgColor
+            cell.layer?.borderWidth = isInParty ? 2.5 : 1
             contentView.addSubview(cell)
 
             // Sprite centered in cell
@@ -93,21 +90,20 @@ final class CollectionTabView: DSTabView {
             sprite.imageScaling = .scaleProportionallyUpOrDown
             sprite.wantsLayer = true
             sprite.layer?.magnificationFilter = .nearest
-            sprite.alphaValue = unlocked ? 1.0 : 0.2
             contentView.addSubview(sprite)
 
             // Name/level below sprite
+            let instance = state.pokemonInstances[entry.id]
             let labelY = spriteY + spriteSize + 1
-            let labelText = unlocked ? entry.displayName : "Lv.\(entry.unlockLevel)"
-            let labelColor: NSColor = unlocked ? NSColor(white: 0.2, alpha: 1) : .gray
-            let label = makeLabel(labelText, size: 8, bold: unlocked, color: labelColor)
+            let labelText = instance != nil ? "\(entry.displayName) Lv.\(instance!.level)" : entry.displayName
+            let label = makeLabel(labelText, size: 8, bold: true, color: NSColor(white: 0.2, alpha: 1))
             label.frame = NSRect(x: cellRect.minX + 2, y: labelY, width: cellRect.width - 4, height: 12)
             label.alignment = .center
             label.lineBreakMode = .byTruncatingTail
             contentView.addSubview(label)
 
             // Gold dot if in party
-            if unlocked && partySet.contains(entry.id) {
+            if isInParty {
                 let dot = NSView(frame: NSRect(x: cellRect.maxX - 10, y: cellRect.minY + 4, width: 6, height: 6))
                 dot.wantsLayer = true
                 dot.layer?.backgroundColor = Self.goldDot.cgColor
@@ -115,8 +111,8 @@ final class CollectionTabView: DSTabView {
                 contentView.addSubview(dot)
             }
 
-            // Hit region (in the scrollView's content coordinates)
-            addHitRegion(HitRegion(id: "collection_\(index)", rect: cellRect, action: .showDetail(pokemonId: entry.id), enabled: unlocked))
+            // Hit region — always enabled
+            addHitRegion(HitRegion(id: "collection_\(index)", rect: cellRect, action: .showDetail(pokemonId: entry.id), enabled: true))
         }
     }
 

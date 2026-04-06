@@ -23,9 +23,7 @@ final class GameSystems {
 
     enum GameEvent {
         case levelUp(Int)
-        case evolved(EvolutionStage)
         case achievementUnlocked(Achievement)
-        case prestigeComplete(Int)
         case cosmeticRolled(Cosmetic)
         case mutationOccurred(String)
         case challengeComplete(WeeklyChallenge)
@@ -42,23 +40,27 @@ final class GameSystems {
         state.totalKeysTyped += 1
         state.sessionKeysTyped += 1
 
-        // Every 5th keypress earns 1 base XP
+        // Every 5th keypress = 1 XP to lead pokemon
         if state.totalKeysTyped % 5 == 0 {
-            let baseXP = 1
-            let gained = Int(Double(baseXP) * state.totalMultiplier)
-            state.xp += max(gained, 1)
-            state.totalXPEarned += max(gained, 1)
+            if let leadId = state.party.first, var instance = state.pokemonInstances[leadId] {
+                let gained = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier), 1)
+                let leveledUp = instance.addXP(gained)
+                state.pokemonInstances[leadId] = instance
+                if leveledUp { onEvent?(.levelUp(instance.level)) }
+            }
         }
 
-        // Drain rest XP (1 per keypress while pool lasts)
+        // Drain rest XP (1 per keypress while pool lasts) — to lead pokemon
         if state.restXP > 0 {
             state.restXP -= 1
-            state.xp += 1
-            state.totalXPEarned += 1
+            if let leadId = state.party.first, var instance = state.pokemonInstances[leadId] {
+                let leveledUp = instance.addXP(1)
+                state.pokemonInstances[leadId] = instance
+                if leveledUp { onEvent?(.levelUp(instance.level)) }
+            }
         }
 
         updateTypingStreak()
-        checkLevelUp()
         checkAchievements()
 
         keypressSinceLastSave += 1
@@ -125,28 +127,6 @@ final class GameSystems {
         if tickCount % 5 == 0 {
             state.save()
         }
-    }
-
-    func prestige() -> Bool {
-        guard state.level >= 20 else { return false }
-
-        // Reset progress
-        state.xp = 0
-        state.level = 1
-        state.evolutionStage = .egg
-        state.sessionKeysTyped = 0
-        state.sessionActiveMinutes = 0
-
-        // Keep: totalKeysTyped, totalWordsTyped, achievements, cosmetics, streaks
-        state.prestigeCount += 1
-        state.permanentXPMultiplier += 0.05
-
-        let rolled = rollCosmetic()
-        _ = rolled // cosmetic event fired inside rollCosmetic
-
-        onEvent?(.prestigeComplete(state.prestigeCount))
-        state.save()
-        return true
     }
 
     @discardableResult
@@ -245,36 +225,10 @@ final class GameSystems {
 
     /// Called externally after XP is added directly (e.g., from feeding)
     func checkAfterXPGain() {
-        checkLevelUp()
         checkAchievements()
     }
 
     // MARK: - Private
-
-    private func checkLevelUp() {
-        while state.xp >= state.xpToNextLevel {
-            state.xp -= state.xpToNextLevel
-            state.level += 1
-            onEvent?(.levelUp(state.level))
-        }
-
-        // Check evolution
-        let newStage = resolveEvolutionStage()
-        if newStage != state.evolutionStage {
-            state.evolutionStage = newStage
-            onEvent?(.evolved(newStage))
-        }
-    }
-
-    private func resolveEvolutionStage() -> EvolutionStage {
-        // Walk stages in reverse to find highest matching
-        for stage in EvolutionStage.allCases.reversed() {
-            if state.level >= stage.levelThreshold {
-                return stage
-            }
-        }
-        return .egg
-    }
 
     private func checkAchievements() {
         for i in state.achievements.indices {
@@ -286,17 +240,16 @@ final class GameSystems {
             case "chatterbox":   met = state.totalWordsTyped >= 1000
             case "novelist":     met = state.totalWordsTyped >= 10000
             case "author":       met = state.totalWordsTyped >= 100000
-            case "level5":       met = state.level >= 5
-            case "level20":      met = state.level >= 20
+            case "level5":       met = state.highestLevel >= 5
+            case "level20":      met = state.highestLevel >= 20
             case "streak3":      met = state.typingStreak >= 3
             case "streak7":      met = state.typingStreak >= 7
             case "streak30":     met = state.typingStreak >= 30
-            case "hatchling":    met = state.evolutionStage.rawValue >= EvolutionStage.hatchling.rawValue
-            case "adult":        met = state.evolutionStage.rawValue >= EvolutionStage.adult.rawValue
-            case "evolved":      met = state.evolutionStage.rawValue >= EvolutionStage.evolved.rawValue
+            case "hatchling":    met = state.highestLevel >= 5
+            case "adult":        met = state.highestLevel >= 30
+            case "evolved":      met = state.highestLevel >= 50
             case "speed_demon":  met = state.currentWPM >= 80
             case "cosmetic5":    met = state.cosmetics.filter(\.owned).count >= 5
-            case "prestige3":    met = state.prestigeCount >= 3
             case "mutation":     met = state.mutationColor != nil
             default:             met = false
             }

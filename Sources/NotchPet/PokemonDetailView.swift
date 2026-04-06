@@ -3,25 +3,50 @@ import AppKit
 final class PokemonDetailView: NSView {
 
     var onBack: (() -> Void)?
-    var onSelectPet: ((String, Bool) -> Void)?
+    var onAddToParty: ((String) -> Void)?
+    var onRemoveFromParty: ((String) -> Void)?
 
     private let entry: PokemonEntry
-    private let unlocked: Bool
+    private let instance: PokemonInstance?
     private let shinyUnlocked: Bool
-    private let currentLevel: Int
+    private let isInParty: Bool
+    private let partyFull: Bool
     private var isShiny: Bool = false
 
     private var spriteImageView: NSImageView?
     private var normalButton: NSButton?
     private var shinyButton: NSButton?
 
+    // Type colors
+    private static let typeColors: [String: NSColor] = [
+        "Normal": NSColor(red: 0xA8/255, green: 0xA8/255, blue: 0x78/255, alpha: 1),
+        "Fire": NSColor(red: 0xF0/255, green: 0x80/255, blue: 0x30/255, alpha: 1),
+        "Water": NSColor(red: 0x68/255, green: 0x90/255, blue: 0xF0/255, alpha: 1),
+        "Grass": NSColor(red: 0x78/255, green: 0xC8/255, blue: 0x50/255, alpha: 1),
+        "Electric": NSColor(red: 0xF8/255, green: 0xD0/255, blue: 0x30/255, alpha: 1),
+        "Psychic": NSColor(red: 0xF8/255, green: 0x58/255, blue: 0x88/255, alpha: 1),
+        "Dark": NSColor(red: 0x70/255, green: 0x58/255, blue: 0x48/255, alpha: 1),
+        "Dragon": NSColor(red: 0x70/255, green: 0x38/255, blue: 0xF8/255, alpha: 1),
+        "Ghost": NSColor(red: 0x70/255, green: 0x58/255, blue: 0x98/255, alpha: 1),
+        "Fighting": NSColor(red: 0xC0/255, green: 0x30/255, blue: 0x28/255, alpha: 1),
+        "Ice": NSColor(red: 0x98/255, green: 0xD8/255, blue: 0xD8/255, alpha: 1),
+        "Fairy": NSColor(red: 0xEE/255, green: 0x99/255, blue: 0xAC/255, alpha: 1),
+        "Flying": NSColor(red: 0xA8/255, green: 0x90/255, blue: 0xF0/255, alpha: 1),
+        "Poison": NSColor(red: 0xA0/255, green: 0x40/255, blue: 0xA0/255, alpha: 1),
+        "Ground": NSColor(red: 0xE0/255, green: 0xC0/255, blue: 0x68/255, alpha: 1),
+        "Rock": NSColor(red: 0xB8/255, green: 0xA0/255, blue: 0x38/255, alpha: 1),
+        "Steel": NSColor(red: 0xB8/255, green: 0xB8/255, blue: 0xD0/255, alpha: 1),
+        "Bug": NSColor(red: 0xA8/255, green: 0xB8/255, blue: 0x20/255, alpha: 1),
+    ]
+
     // MARK: - Init
 
-    init(entry: PokemonEntry, unlocked: Bool, shinyUnlocked: Bool, currentLevel: Int) {
+    init(entry: PokemonEntry, instance: PokemonInstance?, shinyUnlocked: Bool, isInParty: Bool, partyFull: Bool) {
         self.entry = entry
-        self.unlocked = unlocked
+        self.instance = instance
         self.shinyUnlocked = shinyUnlocked
-        self.currentLevel = currentLevel
+        self.isInParty = isInParty
+        self.partyFull = partyFull
         super.init(frame: .zero)
         wantsLayer = true
         buildUI()
@@ -81,9 +106,6 @@ final class PokemonDetailView: NSView {
         imageView.imageScaling = .scaleProportionallyUpOrDown
         imageView.image = PetCollection.spriteImage(for: entry.id, shiny: false)
         imageView.translatesAutoresizingMaskIntoConstraints = false
-        if !unlocked {
-            imageView.alphaValue = 0.2
-        }
         spriteContainer.addSubview(imageView)
         NSLayoutConstraint.activate([
             imageView.topAnchor.constraint(equalTo: spriteContainer.topAnchor),
@@ -93,17 +115,6 @@ final class PokemonDetailView: NSView {
         ])
         self.spriteImageView = imageView
 
-        if !unlocked {
-            let lockOverlay = makeLabel(size: 32, bold: false, color: .white)
-            lockOverlay.stringValue = "\u{1F512}"
-            lockOverlay.alignment = .center
-            spriteContainer.addSubview(lockOverlay)
-            NSLayoutConstraint.activate([
-                lockOverlay.centerXAnchor.constraint(equalTo: spriteContainer.centerXAnchor),
-                lockOverlay.centerYAnchor.constraint(equalTo: spriteContainer.centerYAnchor),
-            ])
-        }
-
         stack.addArrangedSubview(spriteContainer)
 
         // Name
@@ -112,36 +123,159 @@ final class PokemonDetailView: NSView {
         nameLabel.alignment = .center
         stack.addArrangedSubview(nameLabel)
 
-        if unlocked {
-            // Unlock level subtitle
-            let levelLabel = makeLabel(size: 12, bold: false, color: .gray)
-            levelLabel.stringValue = "Level \(entry.unlockLevel) unlock"
-            levelLabel.alignment = .center
-            stack.addArrangedSubview(levelLabel)
+        // Level + XP bar
+        let displayLevel = instance?.level ?? 1
+        let displayProgress = instance?.levelProgress ?? 0
+        let displayXP = instance?.xp ?? 0
+        let displayXPNeeded = instance?.xpToNextLevel ?? PokemonInstance(pokemonId: entry.id).xpToNextLevel
 
-            // Shiny section (only if shiny is unlocked)
-            if shinyUnlocked && entry.hasShiny {
-                let shinyCard = buildShinyCard()
-                stack.addArrangedSubview(shinyCard)
-                shinyCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
-                shinyCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
-            }
+        let levelLabel = makeLabel(size: 14, bold: true, color: .white)
+        levelLabel.stringValue = "Level \(displayLevel)"
+        levelLabel.alignment = .center
+        stack.addArrangedSubview(levelLabel)
 
-            // Set as Active Pet button
-            let selectButton = makeActionButton(title: "Set as Active Pet")
-            selectButton.target = self
-            selectButton.action = #selector(selectPetTapped)
-            stack.addArrangedSubview(selectButton)
-            selectButton.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
-            selectButton.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+        // XP progress bar row
+        let xpRow = NSStackView()
+        xpRow.orientation = .horizontal
+        xpRow.spacing = 8
+        xpRow.alignment = .centerY
+        xpRow.translatesAutoresizingMaskIntoConstraints = false
 
-        } else {
-            // Locked card
-            let lockedCard = buildLockedCard()
-            stack.addArrangedSubview(lockedCard)
-            lockedCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
-            lockedCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+        let progressBar = ProgressBarView(progress: displayProgress)
+        progressBar.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            progressBar.heightAnchor.constraint(equalToConstant: 8),
+        ])
+
+        let xpLabel = makeLabel(size: 11, bold: false, color: .gray)
+        xpLabel.stringValue = "\(displayXP) / \(displayXPNeeded) XP"
+        xpLabel.setContentHuggingPriority(.required, for: .horizontal)
+        xpLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        xpRow.addArrangedSubview(progressBar)
+        xpRow.addArrangedSubview(xpLabel)
+        stack.addArrangedSubview(xpRow)
+        xpRow.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+        xpRow.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+
+        // Moves section
+        let movesCard = buildMovesCard()
+        stack.addArrangedSubview(movesCard)
+        movesCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+        movesCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+
+        // Stats: Berries Fed
+        let foodCount = instance?.foodEaten ?? 0
+        let statsLabel = makeLabel(size: 12, bold: false, color: .gray)
+        statsLabel.stringValue = "Berries Fed: \(foodCount)"
+        statsLabel.alignment = .center
+        stack.addArrangedSubview(statsLabel)
+
+        // Shiny section (only if shiny is unlocked)
+        if shinyUnlocked && entry.hasShiny {
+            let shinyCard = buildShinyCard()
+            stack.addArrangedSubview(shinyCard)
+            shinyCard.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+            shinyCard.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
         }
+
+        // Party button
+        if isInParty {
+            let removeButton = makeActionButton(title: "Remove from Party")
+            removeButton.target = self
+            removeButton.action = #selector(removeFromPartyTapped)
+            stack.addArrangedSubview(removeButton)
+            removeButton.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+            removeButton.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+        } else if !partyFull {
+            let addButton = makeActionButton(title: "Add to Party")
+            addButton.target = self
+            addButton.action = #selector(addToPartyTapped)
+            stack.addArrangedSubview(addButton)
+            addButton.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+            addButton.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+        }
+    }
+
+    // MARK: - Moves Card
+
+    private func buildMovesCard() -> NSView {
+        let card = makeCard()
+
+        let cardStack = NSStackView()
+        cardStack.orientation = .vertical
+        cardStack.alignment = .leading
+        cardStack.spacing = 6
+        cardStack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(cardStack)
+        NSLayoutConstraint.activate([
+            cardStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            cardStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            cardStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            cardStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+        ])
+
+        let titleLabel = makeLabel(size: 13, bold: true, color: .white)
+        titleLabel.stringValue = "Moves"
+        cardStack.addArrangedSubview(titleLabel)
+
+        let moves = instance?.moves ?? []
+        if moves.isEmpty {
+            let emptyLabel = makeLabel(size: 12, bold: false, color: .gray)
+            emptyLabel.stringValue = "No moves learned yet"
+            cardStack.addArrangedSubview(emptyLabel)
+        } else {
+            for moveName in moves {
+                let moveRow = buildMoveRow(moveName: moveName)
+                cardStack.addArrangedSubview(moveRow)
+            }
+        }
+
+        return card
+    }
+
+    private func buildMoveRow(moveName: String) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 8
+        row.alignment = .centerY
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let move = MoveData.allMoves[moveName]
+        let typeName = move?.type ?? "Normal"
+        let typeColor = PokemonDetailView.typeColors[typeName] ?? PokemonDetailView.typeColors["Normal"]!
+
+        // Type badge
+        let badge = NSView()
+        badge.wantsLayer = true
+        badge.layer?.backgroundColor = typeColor.cgColor
+        badge.layer?.cornerRadius = 4
+        badge.translatesAutoresizingMaskIntoConstraints = false
+
+        let badgeLabel = NSTextField(labelWithString: typeName)
+        badgeLabel.font = NSFont.boldSystemFont(ofSize: 9)
+        badgeLabel.textColor = .white
+        badgeLabel.drawsBackground = false
+        badgeLabel.isBordered = false
+        badgeLabel.isEditable = false
+        badgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        badge.addSubview(badgeLabel)
+
+        NSLayoutConstraint.activate([
+            badgeLabel.leadingAnchor.constraint(equalTo: badge.leadingAnchor, constant: 6),
+            badgeLabel.trailingAnchor.constraint(equalTo: badge.trailingAnchor, constant: -6),
+            badgeLabel.topAnchor.constraint(equalTo: badge.topAnchor, constant: 2),
+            badgeLabel.bottomAnchor.constraint(equalTo: badge.bottomAnchor, constant: -2),
+        ])
+
+        // Move name
+        let nameLabel = makeLabel(size: 12, bold: false, color: .white)
+        nameLabel.stringValue = moveName
+
+        row.addArrangedSubview(badge)
+        row.addArrangedSubview(nameLabel)
+
+        return row
     }
 
     // MARK: - Shiny Card
@@ -185,69 +319,6 @@ final class PokemonDetailView: NSView {
         toggleRow.addArrangedSubview(normalBtn)
         toggleRow.addArrangedSubview(shinyBtn)
         cardStack.addArrangedSubview(toggleRow)
-
-        return card
-    }
-
-    // MARK: - Locked Card
-
-    private func buildLockedCard() -> NSView {
-        let card = makeCard()
-
-        let cardStack = NSStackView()
-        cardStack.orientation = .vertical
-        cardStack.alignment = .leading
-        cardStack.spacing = 8
-        cardStack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(cardStack)
-        NSLayoutConstraint.activate([
-            cardStack.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
-            cardStack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
-            cardStack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-            cardStack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
-        ])
-
-        let lockTitle = makeLabel(size: 13, bold: true, color: .white)
-        lockTitle.stringValue = "\u{1F512} Locked"
-        cardStack.addArrangedSubview(lockTitle)
-
-        let unlockMsg = makeLabel(size: 12, bold: false, color: .gray)
-        unlockMsg.stringValue = "Reach Level \(entry.unlockLevel) to unlock"
-        cardStack.addArrangedSubview(unlockMsg)
-
-        // Current level
-        let currentLabel = makeLabel(size: 12, bold: false, color: .gray)
-        currentLabel.stringValue = "Current Level: \(currentLevel)"
-        cardStack.addArrangedSubview(currentLabel)
-
-        // Progress bar
-        let progressPercent = entry.unlockLevel > 0
-            ? min(Double(currentLevel) / Double(entry.unlockLevel), 1.0)
-            : 1.0
-        let percentInt = Int(progressPercent * 100)
-
-        let progressRow = NSStackView()
-        progressRow.orientation = .horizontal
-        progressRow.spacing = 8
-        progressRow.alignment = .centerY
-        progressRow.translatesAutoresizingMaskIntoConstraints = false
-
-        let progressBar = ProgressBarView(progress: progressPercent)
-        progressBar.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            progressBar.heightAnchor.constraint(equalToConstant: 8),
-        ])
-
-        let percentLabel = makeLabel(size: 11, bold: false, color: .gray)
-        percentLabel.stringValue = "\(percentInt)%"
-        percentLabel.setContentHuggingPriority(.required, for: .horizontal)
-        percentLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        progressRow.addArrangedSubview(progressBar)
-        progressRow.addArrangedSubview(percentLabel)
-        cardStack.addArrangedSubview(progressRow)
-        progressRow.leadingAnchor.constraint(equalTo: cardStack.leadingAnchor).isActive = true
-        progressRow.trailingAnchor.constraint(equalTo: cardStack.trailingAnchor).isActive = true
 
         return card
     }
@@ -337,8 +408,12 @@ final class PokemonDetailView: NSView {
         onBack?()
     }
 
-    @objc private func selectPetTapped() {
-        onSelectPet?(entry.id, isShiny)
+    @objc private func addToPartyTapped() {
+        onAddToParty?(entry.id)
+    }
+
+    @objc private func removeFromPartyTapped() {
+        onRemoveFromParty?(entry.id)
     }
 
     @objc private func normalTapped() {

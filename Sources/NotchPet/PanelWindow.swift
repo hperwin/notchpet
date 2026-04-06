@@ -7,8 +7,6 @@ final class PanelWindow: NSWindow {
 
     // Public API
     var isOpen: Bool = false
-    var onPrestige: (() -> Void)?
-    var onPetSelected: ((String, Bool) -> Void)?
     var onPartyChanged: (([String]) -> Void)?
 
     // Layout constants
@@ -219,12 +217,17 @@ final class PanelWindow: NSWindow {
             showPokemonDetail(id: id)
         case .switchToTab(let index):
             switchToTab(index)
-        case .selectPet(let id, let shiny):
-            onPetSelected?(id, shiny)
         case .addToParty(let id):
             if let state = lastState {
                 if state.party.count < 6 && !state.party.contains(id) {
                     state.party.append(id)
+                    if state.pokemonInstances[id] == nil {
+                        var newInstance = PokemonInstance(pokemonId: id)
+                        if let learnset = MoveData.learnsets[id], let starter = learnset.first(where: { $0.0 == 1 }) {
+                            newInstance.moves = [starter.1]
+                        }
+                        state.pokemonInstances[id] = newInstance
+                    }
                     state.save()
                     onPartyChanged?(state.party)
                     refreshData(state)
@@ -237,8 +240,6 @@ final class PanelWindow: NSWindow {
                 onPartyChanged?(state.party)
                 refreshData(state)
             }
-        case .prestige:
-            onPrestige?()
         }
     }
 
@@ -343,19 +344,23 @@ final class PanelWindow: NSWindow {
 
     private func showPokemonDetail(id: String) {
         guard let state = lastState,
-              let entry = PetCollection.allPokemon.first(where: { $0.id == id }) else { return }
+              let entry = PetCollection.entry(for: id) else { return }
 
-        let unlocked = entry.unlockLevel <= state.level
+        let instance = state.pokemonInstances[id]
         let shinyUnlocked = state.unlockedShinies.contains(id)
+        let isInParty = state.party.contains(id)
+        let partyFull = state.party.count >= 6
 
-        let detail = PokemonDetailView(entry: entry, unlocked: unlocked, shinyUnlocked: shinyUnlocked, currentLevel: state.level)
+        let detail = PokemonDetailView(entry: entry, instance: instance, shinyUnlocked: shinyUnlocked, isInParty: isInParty, partyFull: partyFull)
         detail.translatesAutoresizingMaskIntoConstraints = false
         detail.onBack = { [weak self] in
             self?.restoreCurrentTab()
         }
-        detail.onSelectPet = { [weak self] petId, shiny in
-            self?.onPetSelected?(petId, shiny)
-            self?.restoreCurrentTab()
+        detail.onAddToParty = { [weak self] pokemonId in
+            self?.handleTabAction(.addToParty(id: pokemonId))
+        }
+        detail.onRemoveFromParty = { [weak self] pokemonId in
+            self?.handleTabAction(.removeFromParty(id: pokemonId))
         }
 
         // Replace tab content area with detail view
@@ -367,6 +372,10 @@ final class PanelWindow: NSWindow {
             detail.trailingAnchor.constraint(equalTo: tabContentArea.trailingAnchor),
             detail.bottomAnchor.constraint(equalTo: tabContentArea.bottomAnchor),
         ])
+    }
+
+    func showDetailForPokemon(_ id: String) {
+        showPokemonDetail(id: id)
     }
 
     private func restoreCurrentTab() {

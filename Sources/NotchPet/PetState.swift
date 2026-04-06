@@ -132,16 +132,51 @@ struct WeeklyChallenge: Codable {
     var progress: Double { min(Double(currentValue) / Double(targetValue), 1.0) }
 }
 
+// MARK: - Pokemon Instance
+
+struct PokemonInstance: Codable, Identifiable {
+    let pokemonId: String
+    var level: Int = 1
+    var xp: Int = 0
+    var moves: [String] = []
+    var foodEaten: Int = 0
+
+    var id: String { pokemonId }
+    var xpToNextLevel: Int { Int(100.0 * pow(1.15, Double(level - 1))) }
+    var levelProgress: Double {
+        let needed = xpToNextLevel
+        return needed > 0 ? min(Double(xp) / Double(needed), 1.0) : 0
+    }
+
+    mutating func addXP(_ amount: Int) -> Bool {
+        xp += amount
+        var leveledUp = false
+        while xp >= xpToNextLevel {
+            xp -= xpToNextLevel
+            level += 1
+            leveledUp = true
+            if let learnset = MoveData.learnsets[pokemonId] {
+                for (learnLevel, moveName) in learnset where learnLevel == level {
+                    if moves.count < 4 && !moves.contains(moveName) {
+                        moves.append(moveName)
+                    }
+                }
+            }
+        }
+        return leveledUp
+    }
+}
+
 // MARK: - Pet State (persisted)
 
 final class PetState: Codable {
     // XP & Level
-    var xp: Int = 0
-    var level: Int = 1
-    var totalXPEarned: Int = 0
+    var xp: Int = 0 // DEPRECATED - will be removed
+    var level: Int = 1 // DEPRECATED - will be removed
+    var totalXPEarned: Int = 0 // DEPRECATED - will be removed
 
-    // Evolution
-    var evolutionStage: EvolutionStage = .egg
+    // Pokemon instances
+    var pokemonInstances: [String: PokemonInstance] = [:]
 
     // Typing stats
     var totalKeysTyped: Int = 0
@@ -157,10 +192,6 @@ final class PetState: Codable {
     var lastTypingDate: String?     // yyyy-MM-dd
     var lastLoginDate: String?      // yyyy-MM-dd
 
-    // Prestige
-    var prestigeCount: Int = 0
-    var permanentXPMultiplier: Double = 1.0
-
     // Cosmetics
     var cosmetics: [Cosmetic] = []
     var activeCosmetic: String?     // cosmetic id
@@ -174,17 +205,26 @@ final class PetState: Codable {
     var sessionActiveMinutes: Int = 0
 
     // Pet selection
-    var selectedPet: String = "leafeon"  // pokemon id
     var party: [String] = ["leafeon"]   // up to 6 pokemon ids for menu bar party strip
     var useShiny: Bool = false
     var unlockedShinies: [String] = []   // pokemon ids with shiny unlocked
-    var foodEaten: Int = 0
 
     // Mutation
     var mutationColor: String?      // hex color, nil = normal
 
     // Weekly challenge
     var weeklyChallenge: WeeklyChallenge?
+
+    // MARK: - Computed properties
+
+    var leadPokemon: PokemonInstance? {
+        guard let leadId = party.first else { return nil }
+        return pokemonInstances[leadId]
+    }
+
+    var highestLevel: Int { pokemonInstances.values.map(\.level).max() ?? 1 }
+
+    var totalFoodEaten: Int { pokemonInstances.values.map(\.foodEaten).reduce(0, +) }
 
     // MARK: - Persistence
 
@@ -198,6 +238,23 @@ final class PetState: Codable {
             fresh.initializeDefaults()
             return fresh
         }
+
+        // Migration: populate pokemonInstances from party if empty
+        if state.pokemonInstances.isEmpty && !state.party.isEmpty {
+            for pokemonId in state.party {
+                var instance = PokemonInstance(pokemonId: pokemonId)
+                // Give starter moves (level 1 move)
+                if let learnset = MoveData.learnsets[pokemonId] {
+                    for (learnLevel, moveName) in learnset where learnLevel == 1 {
+                        if instance.moves.count < 4 {
+                            instance.moves.append(moveName)
+                        }
+                    }
+                }
+                state.pokemonInstances[pokemonId] = instance
+            }
+        }
+
         // Ensure all achievements/cosmetics exist
         state.ensureAllAchievements()
         state.ensureAllCosmetics()
@@ -255,7 +312,7 @@ final class PetState: Codable {
     // MARK: - Total XP multiplier
 
     var totalMultiplier: Double {
-        permanentXPMultiplier * streakMultiplier * fatigueMultiplier
+        streakMultiplier * fatigueMultiplier
     }
 
     // MARK: - Built-in achievements
@@ -267,19 +324,18 @@ final class PetState: Codable {
             Achievement(id: "chatterbox", name: "Chatterbox", description: "Type 1,000 words", tier: .common, xpReward: 100),
             Achievement(id: "level5", name: "Growing Up", description: "Reach level 5", tier: .common, xpReward: 75),
             Achievement(id: "streak3", name: "Three's a Charm", description: "3-day typing streak", tier: .common, xpReward: 100),
-            Achievement(id: "hatchling", name: "It's Alive!", description: "Evolve to Hatchling", tier: .common, xpReward: 150),
+            Achievement(id: "hatchling", name: "It's Alive!", description: "Reach level 5 on any Pokemon", tier: .common, xpReward: 150),
             // Rare
             Achievement(id: "novelist", name: "Novelist", description: "Type 10,000 words", tier: .rare, xpReward: 500),
             Achievement(id: "streak7", name: "Week Warrior", description: "7-day typing streak", tier: .rare, xpReward: 300),
             Achievement(id: "level20", name: "Dedicated", description: "Reach level 20", tier: .rare, xpReward: 400),
             Achievement(id: "speed_demon", name: "Speed Demon", description: "Reach 80 WPM", tier: .rare, xpReward: 250),
-            Achievement(id: "adult", name: "All Grown Up", description: "Evolve to Adult", tier: .rare, xpReward: 500),
+            Achievement(id: "adult", name: "All Grown Up", description: "Reach level 30 on any Pokemon", tier: .rare, xpReward: 500),
             Achievement(id: "cosmetic5", name: "Fashionista", description: "Collect 5 cosmetics", tier: .rare, xpReward: 300),
             // Legendary
             Achievement(id: "author", name: "Author", description: "Type 100,000 words", tier: .legendary, xpReward: 2000),
             Achievement(id: "streak30", name: "Unstoppable", description: "30-day typing streak", tier: .legendary, xpReward: 1000),
-            Achievement(id: "evolved", name: "Final Form", description: "Reach Evolved stage", tier: .legendary, xpReward: 1500),
-            Achievement(id: "prestige3", name: "Reborn", description: "Prestige 3 times", tier: .legendary, xpReward: 2000),
+            Achievement(id: "evolved", name: "Final Form", description: "Reach level 50 on any Pokemon", tier: .legendary, xpReward: 1500),
             Achievement(id: "mutation", name: "Rare Specimen", description: "Get a mutation", tier: .legendary, xpReward: 1000),
         ]
 
