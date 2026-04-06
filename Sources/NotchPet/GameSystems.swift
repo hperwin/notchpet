@@ -40,13 +40,23 @@ final class GameSystems {
         state.totalKeysTyped += 1
         state.sessionKeysTyped += 1
 
-        // Every 5th keypress = 1 XP to lead pokemon
+        // Every 5th keypress = XP to party
+        // Lead gets full XP, others get half rate (every 10th keypress)
         if state.totalKeysTyped % 5 == 0 {
-            if let leadId = state.party.first, var instance = state.pokemonInstances[leadId] {
-                let gained = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier), 1)
-                let leveledUp = instance.addXP(gained)
-                state.pokemonInstances[leadId] = instance
-                if leveledUp { onEvent?(.levelUp(instance.level)) }
+            let baseGain = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier), 1)
+            for (i, pokemonId) in state.party.enumerated() {
+                guard var instance = state.pokemonInstances[pokemonId] else { continue }
+                if i == 0 {
+                    // Lead: full XP every 5 keystrokes
+                    let leveledUp = instance.addXP(baseGain)
+                    state.pokemonInstances[pokemonId] = instance
+                    if leveledUp { onEvent?(.levelUp(instance.level)) }
+                } else if state.totalKeysTyped % 10 == 0 {
+                    // Others: half rate (every 10 keystrokes)
+                    let leveledUp = instance.addXP(baseGain)
+                    state.pokemonInstances[pokemonId] = instance
+                    if leveledUp { onEvent?(.levelUp(instance.level)) }
+                }
             }
         }
 

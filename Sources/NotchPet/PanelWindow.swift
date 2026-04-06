@@ -306,15 +306,15 @@ final class PanelWindow: NSWindow {
         let stack = NSStackView()
         stack.orientation = .horizontal
         stack.distribution = .fillEqually
-        stack.spacing = 6
+        stack.spacing = 0
         stack.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: bar.topAnchor, constant: 6),
-            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
-            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -6),
+            stack.topAnchor.constraint(equalTo: bar.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
         let titles = ["Party", "Box", "Trainer", "Medals"]
@@ -322,7 +322,12 @@ final class PanelWindow: NSWindow {
         for (index, title) in titles.enumerated() {
             let btn = RetroTabButton(title: title, target: self, action: #selector(tabTapped(_:)))
             btn.tag = index
+            btn.setContentHuggingPriority(.defaultLow, for: .vertical)
+            btn.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
             stack.addArrangedSubview(btn)
+            // Force button to fill full height of stack
+            btn.topAnchor.constraint(equalTo: stack.topAnchor).isActive = true
+            btn.bottomAnchor.constraint(equalTo: stack.bottomAnchor).isActive = true
             tabButtons.append(btn)
         }
 
@@ -450,38 +455,33 @@ private class RetroTabButton: NSButton {
     }
 
     private func updateAppearance() {
-        layer?.cornerRadius = 6
-        layer?.borderWidth = 2
+        layer?.cornerRadius = 0
+        // Right-side divider line
+        layer?.sublayers?.filter { $0.name == "divider" }.forEach { $0.removeFromSuperlayer() }
+        let divider = CALayer()
+        divider.name = "divider"
+        divider.backgroundColor = NSColor(red: 0x18/255, green: 0x30/255, blue: 0x50/255, alpha: 1).cgColor
+        divider.frame = CGRect(x: bounds.width - 1, y: 4, width: 1, height: bounds.height - 8)
+        layer?.addSublayer(divider)
+
+        layer?.sublayers?.filter { $0.name == "tabGrad" }.forEach { $0.removeFromSuperlayer() }
+        let grad = CAGradientLayer()
+        grad.name = "tabGrad"
+        grad.frame = bounds
+        grad.startPoint = CGPoint(x: 0.5, y: 0)
+        grad.endPoint = CGPoint(x: 0.5, y: 1)
 
         if isActiveTab {
-            layer?.borderColor = Self.activeBorder.cgColor
             contentTintColor = NSColor(red: 0x40/255, green: 0x20/255, blue: 0x00/255, alpha: 1)
-            // Gold gradient
-            layer?.sublayers?.filter { $0.name == "tabGrad" }.forEach { $0.removeFromSuperlayer() }
-            let grad = CAGradientLayer()
-            grad.name = "tabGrad"
             grad.colors = [Self.activeTop.cgColor, Self.activeBot.cgColor]
-            grad.startPoint = CGPoint(x: 0.5, y: 0)
-            grad.endPoint = CGPoint(x: 0.5, y: 1)
-            grad.cornerRadius = 4
-            grad.frame = bounds.insetBy(dx: 1, dy: 1)
-            layer?.insertSublayer(grad, at: 0)
         } else {
-            layer?.borderColor = Self.inactiveBorder.cgColor
             contentTintColor = .white
-            layer?.sublayers?.filter { $0.name == "tabGrad" }.forEach { $0.removeFromSuperlayer() }
-            let grad = CAGradientLayer()
-            grad.name = "tabGrad"
-            grad.colors = [
-                (isHovered ? Self.inactiveTop.blended(withFraction: 0.3, of: .white)! : Self.inactiveTop).cgColor,
-                (isHovered ? Self.inactiveBot.blended(withFraction: 0.2, of: .white)! : Self.inactiveBot).cgColor,
-            ]
-            grad.startPoint = CGPoint(x: 0.5, y: 0)
-            grad.endPoint = CGPoint(x: 0.5, y: 1)
-            grad.cornerRadius = 4
-            grad.frame = bounds.insetBy(dx: 1, dy: 1)
-            layer?.insertSublayer(grad, at: 0)
+            let top = isHovered ? Self.inactiveTop.blended(withFraction: 0.25, of: .white)! : Self.inactiveTop
+            let bot = isHovered ? Self.inactiveBot.blended(withFraction: 0.15, of: .white)! : Self.inactiveBot
+            grad.colors = [top.cgColor, bot.cgColor]
         }
+
+        layer?.insertSublayer(grad, at: 0)
     }
 
     override func layout() {

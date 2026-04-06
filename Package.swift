@@ -15,6 +15,7 @@ let package = Package(
                 .copy("Resources/party_strip.png"),
                 .copy("Resources/party_strip_blue.png"),
                 .copy("Resources/party_strip_red.png"),
+                .copy("Resources/grass_strip.png"),
                 .copy("Resources/bg_party.png"),
                 .copy("Resources/bg_collection.png"),
                 .copy("Resources/bg_stats.png"),
