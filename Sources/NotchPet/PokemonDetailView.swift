@@ -50,6 +50,28 @@ final class PokemonDetailView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         buildUI()
+        startIdleBounce()
+    }
+
+    private func startIdleBounce() {
+        guard let sprite = spriteImageView else { return }
+        sprite.wantsLayer = true
+
+        // Small periodic hop every 3-6 seconds
+        func scheduleHop() {
+            let wait = Double.random(in: 3.0...6.0)
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak sprite] in
+                guard let layer = sprite?.layer else { return }
+                let hop = CAKeyframeAnimation(keyPath: "transform.translation.y")
+                hop.values = [0, -6, 0, -3, 0]
+                hop.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
+                hop.duration = 0.35
+                hop.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer.add(hop, forKey: "idleHop")
+                scheduleHop()
+            }
+        }
+        scheduleHop()
     }
 
     required init?(coder: NSCoder) { fatalError() }
