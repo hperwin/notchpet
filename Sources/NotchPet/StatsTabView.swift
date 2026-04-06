@@ -2,6 +2,8 @@ import AppKit
 
 final class StatsTabView: DSTabView {
 
+    override var isFlipped: Bool { true }
+
     // DS palette
     private static let darkBlue = NSColor(red: 0x28/255, green: 0x38/255, blue: 0x58/255, alpha: 1)
     private static let darkerBlue = NSColor(red: 0x1a/255, green: 0x28/255, blue: 0x48/255, alpha: 1)

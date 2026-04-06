@@ -91,6 +91,9 @@ class DSTabView: NSView, DSTab {
         // Subclasses override this
     }
 
+    /// Override in subclasses to skip hover tracking (e.g. when using a scroll view)
+    var disableHoverTracking: Bool { false }
+
     // MARK: - Hit Region Management
 
     func clearHitRegions() {
@@ -103,6 +106,8 @@ class DSTabView: NSView, DSTab {
 
     func addHitRegion(_ region: HitRegion) {
         hitRegions.append(region)
+
+        guard !disableHoverTracking else { return }
 
         let area = NSTrackingArea(
             rect: region.rect,

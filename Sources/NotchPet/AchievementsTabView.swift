@@ -2,6 +2,8 @@ import AppKit
 
 final class AchievementsTabView: DSTabView {
 
+    override var isFlipped: Bool { true }
+
     // DS palette
     private static let darkNavy = NSColor(red: 0x1a/255, green: 0x20/255, blue: 0x40/255, alpha: 1)
     private static let gold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)

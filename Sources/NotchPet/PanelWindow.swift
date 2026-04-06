@@ -186,7 +186,7 @@ final class PanelWindow: NSWindow {
             tabBar.leadingAnchor.constraint(equalTo: mainContainer.leadingAnchor),
             tabBar.trailingAnchor.constraint(equalTo: mainContainer.trailingAnchor),
             tabBar.bottomAnchor.constraint(equalTo: mainContainer.bottomAnchor),
-            tabBar.heightAnchor.constraint(equalToConstant: 40),
+            tabBar.heightAnchor.constraint(equalToConstant: 52),
         ])
     }
 
@@ -270,6 +270,10 @@ final class PanelWindow: NSWindow {
         if let state = lastState {
             tabs[index].update(state: state)
         }
+
+        // Force layout to prevent blank tab
+        tabContentArea.needsLayout = true
+        tabContentArea.layoutSubtreeIfNeeded()
     }
 
     // MARK: - Tab Bar
@@ -297,17 +301,17 @@ final class PanelWindow: NSWindow {
         let icons = ["Party", "Box", "Trainer", "Medals"]
         tabButtons.removeAll()
         for (index, title) in icons.enumerated() {
-            let btn = NSButton(title: title, target: self, action: #selector(tabTapped(_:)))
+            let btn = HoverButton(title: title, target: self, action: #selector(tabTapped(_:)))
             btn.tag = index
             btn.isBordered = false
             btn.wantsLayer = true
-            btn.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+            btn.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
             btn.contentTintColor = .white
             btn.translatesAutoresizingMaskIntoConstraints = false
 
-            // Top border line for active tab
+            // Top accent line
             let topLine = CALayer()
-            topLine.frame = CGRect(x: 0, y: 0, width: 130, height: 2)
+            topLine.frame = CGRect(x: 0, y: 0, width: 130, height: 3)
             topLine.name = "topLine"
             btn.layer?.addSublayer(topLine)
 
@@ -406,5 +410,33 @@ private final class PanelBackgroundView: NSView {
         layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         layer.cornerRadius = cornerRadius
         layer.masksToBounds = true
+    }
+}
+
+// MARK: - Hover Button
+
+private class HoverButton: NSButton {
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let existing = trackingArea { removeTrackingArea(existing) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            self.animator().alphaValue = 0.7
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            self.animator().alphaValue = 1.0
+        }
     }
 }

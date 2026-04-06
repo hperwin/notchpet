@@ -26,6 +26,10 @@ final class CollectionTabView: DSTabView {
 
     override var isFlipped: Bool { true }
 
+    // Disable hover tracking — doesn't work with scroll views
+    // Click detection is handled by mouseDown override
+    override var disableHoverTracking: Bool { true }
+
     private func setupScrollView() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
@@ -118,14 +122,11 @@ final class CollectionTabView: DSTabView {
 
     // Override mouseDown to account for scroll offset
     override func mouseDown(with event: NSEvent) {
-        let locInScroll = scrollView.contentView.convert(event.locationInWindow, from: nil)
-        let docOffset = scrollView.contentView.bounds.origin
-        let locInContent = NSPoint(x: locInScroll.x, y: locInScroll.y + docOffset.y)
-        // Flip Y for the content view
-        let flippedY = contentView.frame.height - locInContent.y
+        // Convert click to the flipped contentView's coordinate space
+        let locInContentView = contentView.convert(event.locationInWindow, from: nil)
 
         for region in hitRegions where region.enabled {
-            if region.rect.contains(NSPoint(x: locInContent.x, y: flippedY)) {
+            if region.rect.contains(locInContentView) {
                 onAction?(region.action)
                 return
             }
