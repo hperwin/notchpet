@@ -104,6 +104,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         foodSpawner.onPartyPokemonFed = { [weak self] pokemonId, berryName in
             self?.handlePartyPokemonFed(pokemonId: pokemonId, berryName: berryName)
         }
+        foodSpawner.onDragOverParty = { [weak self] foodFrame in
+            self?.partyStrip.highlightPokemon(at: .zero, foodFrame: foodFrame)
+        }
+        foodSpawner.onDragEnd = { [weak self] in
+            self?.partyStrip.clearHighlights()
+        }
+        foodSpawner.onPartyPokemonBounce = { [weak self] pokemonId in
+            self?.partyStrip.playFeedBounce(for: pokemonId)
+        }
         foodSpawner.start()
 
         // Keyboard monitor
@@ -134,7 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Preferences.shared.isAutoLaunchEnabled = true
         }
 
-        petWindow.orderFront(nil)
+        // Don't show the pet window — party strip IS the party, no separate lead pet
+        // petWindow.orderFront(nil)
     }
 
     // MARK: - Lead Pokemon
@@ -274,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Party Strip
 
     private func updatePartyStrip() {
+        // Show ALL party members in the strip — no separate "lead" pet
         partyStrip.updateParty(petState.party, level: petState.highestLevel)
     }
 

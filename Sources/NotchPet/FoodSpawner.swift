@@ -5,6 +5,12 @@ final class FoodSpawner {
     var onFoodEaten: ((String) -> Void)?
     var onPartyPokemonFed: ((String, String) -> Void)?  // (pokemonId, berryName)
     var partyFramesProvider: (() -> [(id: String, frame: NSRect)])?
+    /// Called during drag to highlight the Pokemon under the food
+    var onDragOverParty: ((NSRect) -> Void)?
+    /// Called when drag ends (clear highlights)
+    var onDragEnd: (() -> Void)?
+    /// Called after feeding a party Pokemon (trigger bounce animation)
+    var onPartyPokemonBounce: ((String) -> Void)?
 
     private var foodWindow: NSWindow?
     private var spawnTimer: Timer?
@@ -197,6 +203,7 @@ final class FoodSpawner {
             }
         }, completionHandler: { [weak self] in
             self?.removeFoodWindow()
+            self?.onPartyPokemonBounce?(pokemonId)
             self?.onPartyPokemonFed?(pokemonId, name)
             self?.scheduleNextSpawn()
         })
@@ -261,9 +268,12 @@ private class FoodView: NSView {
             y: windowStartOrigin.y + dy
         )
         window.setFrameOrigin(newOrigin)
+        // Highlight party Pokemon under the food
+        spawner?.onDragOverParty?(window.frame)
     }
 
     override func mouseUp(with event: NSEvent) {
+        spawner?.onDragEnd?()
         spawner?.handleFoodDrop()
     }
 }
