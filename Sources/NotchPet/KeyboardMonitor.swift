@@ -80,7 +80,7 @@ final class KeyboardMonitor {
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            options: .listenOnly,
             eventsOfInterest: mask,
             callback: keyboardCallback,
             userInfo: selfPtr
@@ -93,7 +93,7 @@ final class KeyboardMonitor {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        print("[KeyboardMonitor] Event tap active.")
+        NSLog("NotchPet: Keyboard event tap active (listenOnly)")
         return true
     }
 

@@ -15,7 +15,7 @@ final class StatsTabView: DSTabView {
     private static let xpBarFill = NSColor(red: 0x4C/255, green: 0xAF/255, blue: 0x50/255, alpha: 1)
 
     // Layout constants
-    private static let padding: CGFloat = 10
+    private static let padding: CGFloat = 18
     private static let cardRadius: CGFloat = 10
     private static let cardBorderWidth: CGFloat = 1
     private static let topRowHeight: CGFloat = 170
@@ -23,7 +23,7 @@ final class StatsTabView: DSTabView {
     private static let cardGap: CGFloat = 10
 
     init() {
-        super.init(backgroundColor: StatsTabView.bgColor)
+        super.init(backgroundColor: .clear)
     }
 
     required init?(coder: NSCoder) { fatalError() }

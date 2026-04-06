@@ -266,19 +266,17 @@ final class PanelWindow: NSWindow {
         guard index >= 0 && index < tabs.count else { return }
         currentTabIndex = index
 
-        // Remove current tab view
-        tabContentArea.subviews.forEach { $0.removeFromSuperview() }
+        // Remove ALL subviews and their constraints
+        for sub in tabContentArea.subviews {
+            sub.removeFromSuperview()
+        }
 
-        // Add new tab view
+        // Get the tab view and set its frame directly (more reliable than constraints for cached views)
         let tabView = tabs[index].view
-        tabView.translatesAutoresizingMaskIntoConstraints = false
+        tabView.translatesAutoresizingMaskIntoConstraints = true
+        tabView.frame = tabContentArea.bounds
+        tabView.autoresizingMask = [.width, .height]
         tabContentArea.addSubview(tabView)
-        NSLayoutConstraint.activate([
-            tabView.topAnchor.constraint(equalTo: tabContentArea.topAnchor),
-            tabView.leadingAnchor.constraint(equalTo: tabContentArea.leadingAnchor),
-            tabView.trailingAnchor.constraint(equalTo: tabContentArea.trailingAnchor),
-            tabView.bottomAnchor.constraint(equalTo: tabContentArea.bottomAnchor),
-        ])
 
         // Update tab bar button states
         updateTabBarAppearance()
