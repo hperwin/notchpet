@@ -281,40 +281,47 @@ final class PanelWindow: NSWindow {
     private func buildTabBar() -> NSView {
         let bar = NSView()
         bar.wantsLayer = true
-        bar.layer?.backgroundColor = NSColor(red: 0x18/255, green: 0x18/255, blue: 0x20/255, alpha: 1).cgColor
+        // DS-style dark blue gradient bar
+        let gradient = CAGradientLayer()
+        gradient.colors = [
+            NSColor(red: 0x30/255, green: 0x58/255, blue: 0x90/255, alpha: 1).cgColor,
+            NSColor(red: 0x20/255, green: 0x40/255, blue: 0x70/255, alpha: 1).cgColor,
+        ]
+        gradient.startPoint = CGPoint(x: 0.5, y: 0)
+        gradient.endPoint = CGPoint(x: 0.5, y: 1)
+        bar.layer?.insertSublayer(gradient, at: 0)
+        // Top border line (pixel art style)
+        let topBorder = CALayer()
+        topBorder.backgroundColor = NSColor(red: 0x50/255, green: 0x78/255, blue: 0xB0/255, alpha: 1).cgColor
+        bar.layer?.addSublayer(topBorder)
         bar.translatesAutoresizingMaskIntoConstraints = false
+
+        // Store gradient and border for resizing
+        bar.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: bar, queue: .main) { _ in
+            gradient.frame = bar.bounds
+            topBorder.frame = CGRect(x: 0, y: bar.bounds.height - 2, width: bar.bounds.width, height: 2)
+        }
 
         let stack = NSStackView()
         stack.orientation = .horizontal
         stack.distribution = .fillEqually
-        stack.spacing = 0
+        stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
         bar.addSubview(stack)
 
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: bar.topAnchor),
-            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
+            stack.topAnchor.constraint(equalTo: bar.topAnchor, constant: 6),
+            stack.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 8),
+            stack.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -8),
+            stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor, constant: -6),
         ])
 
-        let icons = ["Party", "Box", "Trainer", "Medals"]
+        let titles = ["Party", "Box", "Trainer", "Medals"]
         tabButtons.removeAll()
-        for (index, title) in icons.enumerated() {
-            let btn = HoverButton(title: title, target: self, action: #selector(tabTapped(_:)))
+        for (index, title) in titles.enumerated() {
+            let btn = RetroTabButton(title: title, target: self, action: #selector(tabTapped(_:)))
             btn.tag = index
-            btn.isBordered = false
-            btn.wantsLayer = true
-            btn.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-            btn.contentTintColor = .white
-            btn.translatesAutoresizingMaskIntoConstraints = false
-
-            // Top accent line
-            let topLine = CALayer()
-            topLine.frame = CGRect(x: 0, y: 0, width: 130, height: 3)
-            topLine.name = "topLine"
-            btn.layer?.addSublayer(topLine)
-
             stack.addArrangedSubview(btn)
             tabButtons.append(btn)
         }
@@ -324,18 +331,10 @@ final class PanelWindow: NSWindow {
     }
 
     private func updateTabBarAppearance() {
-        let activeColor = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
-        let inactiveColor = NSColor(red: 0x30/255, green: 0x30/255, blue: 0x38/255, alpha: 1)
-
         for btn in tabButtons {
             let isActive = btn.tag == currentTabIndex
-            btn.layer?.backgroundColor = isActive
-                ? NSColor(red: 0x28/255, green: 0x28/255, blue: 0x30/255, alpha: 1).cgColor
-                : NSColor.clear.cgColor
-            btn.contentTintColor = isActive ? activeColor : NSColor(white: 0.55, alpha: 1)
-
-            if let topLine = btn.layer?.sublayers?.first(where: { $0.name == "topLine" }) {
-                topLine.backgroundColor = isActive ? activeColor.cgColor : NSColor.clear.cgColor
+            if let retro = btn as? RetroTabButton {
+                retro.setActive(isActive)
             }
         }
     }
@@ -413,10 +412,82 @@ private final class PanelBackgroundView: NSView {
     }
 }
 
-// MARK: - Hover Button
+// MARK: - Retro Tab Button (DS-style)
 
-private class HoverButton: NSButton {
+private class RetroTabButton: NSButton {
+    private var isActiveTab = false
     private var trackingArea: NSTrackingArea?
+    private var isHovered = false
+
+    private static let activeTop = NSColor(red: 0xF8/255, green: 0xC0/255, blue: 0x30/255, alpha: 1)
+    private static let activeBot = NSColor(red: 0xE0/255, green: 0x90/255, blue: 0x10/255, alpha: 1)
+    private static let activeBorder = NSColor(red: 0xA0/255, green: 0x68/255, blue: 0x00/255, alpha: 1)
+    private static let inactiveTop = NSColor(red: 0x40/255, green: 0x68/255, blue: 0xA8/255, alpha: 1)
+    private static let inactiveBot = NSColor(red: 0x30/255, green: 0x50/255, blue: 0x88/255, alpha: 1)
+    private static let inactiveBorder = NSColor(red: 0x20/255, green: 0x38/255, blue: 0x60/255, alpha: 1)
+
+    convenience init(title: String, target: AnyObject?, action: Selector?) {
+        self.init(frame: .zero)
+        self.title = title
+        self.target = target
+        self.action = action
+        self.isBordered = false
+        self.wantsLayer = true
+        self.font = NSFont.boldSystemFont(ofSize: 11)
+        self.translatesAutoresizingMaskIntoConstraints = false
+
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.5)
+        shadow.shadowOffset = NSSize(width: 1, height: -1)
+        shadow.shadowBlurRadius = 0
+        self.shadow = shadow
+    }
+
+    func setActive(_ active: Bool) {
+        isActiveTab = active
+        needsDisplay = true
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 2
+
+        if isActiveTab {
+            layer?.borderColor = Self.activeBorder.cgColor
+            contentTintColor = NSColor(red: 0x40/255, green: 0x20/255, blue: 0x00/255, alpha: 1)
+            // Gold gradient
+            layer?.sublayers?.filter { $0.name == "tabGrad" }.forEach { $0.removeFromSuperlayer() }
+            let grad = CAGradientLayer()
+            grad.name = "tabGrad"
+            grad.colors = [Self.activeTop.cgColor, Self.activeBot.cgColor]
+            grad.startPoint = CGPoint(x: 0.5, y: 0)
+            grad.endPoint = CGPoint(x: 0.5, y: 1)
+            grad.cornerRadius = 4
+            grad.frame = bounds.insetBy(dx: 1, dy: 1)
+            layer?.insertSublayer(grad, at: 0)
+        } else {
+            layer?.borderColor = Self.inactiveBorder.cgColor
+            contentTintColor = .white
+            layer?.sublayers?.filter { $0.name == "tabGrad" }.forEach { $0.removeFromSuperlayer() }
+            let grad = CAGradientLayer()
+            grad.name = "tabGrad"
+            grad.colors = [
+                (isHovered ? Self.inactiveTop.blended(withFraction: 0.3, of: .white)! : Self.inactiveTop).cgColor,
+                (isHovered ? Self.inactiveBot.blended(withFraction: 0.2, of: .white)! : Self.inactiveBot).cgColor,
+            ]
+            grad.startPoint = CGPoint(x: 0.5, y: 0)
+            grad.endPoint = CGPoint(x: 0.5, y: 1)
+            grad.cornerRadius = 4
+            grad.frame = bounds.insetBy(dx: 1, dy: 1)
+            layer?.insertSublayer(grad, at: 0)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        updateAppearance()
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -427,16 +498,12 @@ private class HoverButton: NSButton {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            self.animator().alphaValue = 0.7
-        }
+        isHovered = true
+        updateAppearance()
     }
 
     override func mouseExited(with event: NSEvent) {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            self.animator().alphaValue = 1.0
-        }
+        isHovered = false
+        updateAppearance()
     }
 }
