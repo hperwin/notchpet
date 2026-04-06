@@ -1,6 +1,58 @@
 import AppKit
 import QuartzCore
 
+// MARK: - Pixel Grass View (drawn programmatically, no white bg)
+
+private class PixelGrassView: NSView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let w = bounds.width
+        let h = bounds.height
+        let bladeWidth: CGFloat = 3
+
+        // Draw grass blades from bottom up
+        let colors: [NSColor] = [
+            NSColor(red: 0.15, green: 0.55, blue: 0.15, alpha: 1),  // dark green
+            NSColor(red: 0.20, green: 0.65, blue: 0.20, alpha: 1),  // medium green
+            NSColor(red: 0.30, green: 0.75, blue: 0.25, alpha: 1),  // light green
+            NSColor(red: 0.18, green: 0.60, blue: 0.18, alpha: 1),  // mid-dark
+        ]
+
+        var x: CGFloat = 0
+        var seed: UInt64 = 42
+        while x < w {
+            // Simple deterministic random for consistent look
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let colorIdx = Int(seed >> 60) % colors.count
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let bladeH = CGFloat(6 + Int(seed >> 60) % 8) // 6-13pt tall
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let lean = CGFloat(Int(seed >> 60) % 5) - 2 // -2 to 2 lean
+
+            ctx.setFillColor(colors[colorIdx].cgColor)
+            // Triangle blade shape
+            let base = NSPoint(x: x, y: 0)
+            let baseR = NSPoint(x: x + bladeWidth, y: 0)
+            let tip = NSPoint(x: x + bladeWidth / 2 + lean, y: bladeH)
+
+            ctx.move(to: base)
+            ctx.addLine(to: baseR)
+            ctx.addLine(to: tip)
+            ctx.closePath()
+            ctx.fillPath()
+
+            x += bladeWidth - 0.5  // slight overlap
+        }
+    }
+}
+
 // MARK: - Grass Pet View (each party Pokemon)
 
 private class GrassPetView: NSView {
@@ -35,41 +87,49 @@ private class GrassPetView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    // MARK: - Idle Jumping
+    // MARK: - Idle Jumping + Wandering
 
-    func startIdleJumping() {
+    func startIdleBehavior() {
         scheduleNextJump()
     }
 
-    func stopIdleJumping() {
+    func stopIdleBehavior() {
         jumpTimer?.invalidate()
         jumpTimer = nil
     }
 
     private func scheduleNextJump() {
         jumpTimer?.invalidate()
-        let wait = Double.random(in: 3.0...8.0)
+        let wait = Double.random(in: 4.0...10.0)
         jumpTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
-            self?.doJump()
+            self?.doJumpAndHop()
             self?.scheduleNextJump()
         }
     }
 
-    private func doJump() {
+    /// Jump up AND move sideways a few pixels — looks like a natural hop
+    private func doJumpAndHop() {
+        guard let win = window else { return }
+
+        // Vertical jump animation on the sprite
+        let height = CGFloat.random(in: 2...5)
         let jump = CAKeyframeAnimation(keyPath: "transform.translation.y")
-        let height = CGFloat.random(in: 3...6)
         jump.values = [0, height, 0]
         jump.keyTimes = [0, 0.4, 1.0]
-        jump.duration = 0.3
+        jump.duration = 0.25
         jump.timingFunction = CAMediaTimingFunction(name: .easeOut)
         imageView.layer?.add(jump, forKey: "idleJump")
+
+        // Horizontal hop — directly move the window origin
+        let dx = CGFloat.random(in: -5...5)
+        let origin = win.frame.origin
+        win.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y))
     }
 
     // MARK: - Hover
 
     override func mouseEntered(with event: NSEvent) {
         guard !pokemonId.isEmpty else { return }
-        // Bounce on hover
         let bounce = CAKeyframeAnimation(keyPath: "transform.translation.y")
         bounce.values = [0, 4, 0, 2, 0]
         bounce.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
@@ -97,8 +157,7 @@ private class GrassPetView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        let current = NSEvent.mouseLocation
-        let distance = abs(current.x - dragStart.x)
+        let distance = abs(NSEvent.mouseLocation.x - dragStart.x)
         if distance < 3 {
             strip?.handleTap(pokemonId: pokemonId)
         }
@@ -145,7 +204,7 @@ final class PartyStrip {
     private var currentParty: [String] = []
     private var isVisible = false
 
-    private static let grassHeight: CGFloat = 14
+    private static let grassHeight: CGFloat = 7
     private static let pokemonSize: CGFloat = 26
     private static let slotCount = 6
     private static let spacing: CGFloat = 6
@@ -157,19 +216,12 @@ final class PartyStrip {
 
         let startX = auxRight.origin.x + 8
         let totalWidth = CGFloat(Self.slotCount) * (Self.pokemonSize + Self.spacing) - Self.spacing
-        let menuBarBottom = auxRight.origin.y  // bottom edge of the menu bar area
-        let menuBarHeight = auxRight.height     // 32pt
+        let menuBarBottom = auxRight.origin.y
+        let menuBarHeight = auxRight.height
 
-        // --- Grass strip window (at the bottom of the menu bar) ---
-        let grassFrame = NSRect(x: startX - 4, y: menuBarBottom, width: totalWidth + 8, height: Self.grassHeight)
-        let grassView = NSImageView(frame: NSRect(origin: .zero, size: grassFrame.size))
-        grassView.imageScaling = .scaleAxesIndependently
-        grassView.wantsLayer = true
-        grassView.layer?.magnificationFilter = .nearest
-        if let url = Bundle.module.url(forResource: "grass_strip", withExtension: "png"),
-           let img = NSImage(contentsOf: url) {
-            grassView.image = img
-        }
+        // --- Grass strip (programmatic, no image) ---
+        let grassFrame = NSRect(x: startX - 6, y: menuBarBottom, width: totalWidth + 12, height: Self.grassHeight)
+        let grassView = PixelGrassView(frame: NSRect(origin: .zero, size: grassFrame.size))
 
         let grassWin = NSWindow(
             contentRect: grassFrame,
@@ -187,10 +239,9 @@ final class PartyStrip {
         grassWin.orderFront(nil)
         grassWindow = grassWin
 
-        // --- Individual Pokemon windows (sitting in the grass) ---
+        // --- Individual Pokemon windows ---
         for i in 0..<Self.slotCount {
             let x = startX + CGFloat(i) * (Self.pokemonSize + Self.spacing)
-            // Pokemon sit in the menu bar, vertically centered, slightly above the grass
             let y = menuBarBottom + (menuBarHeight - Self.pokemonSize) / 2
 
             let petFrame = NSRect(x: x, y: y, width: Self.pokemonSize, height: Self.pokemonSize)
@@ -214,8 +265,6 @@ final class PartyStrip {
             pokemonWindows.append(win)
         }
 
-        // Grass renders in front — will be ordered after sprites are shown in refreshSprites()
-
         isVisible = true
         refreshSprites()
     }
@@ -224,7 +273,7 @@ final class PartyStrip {
         grassWindow?.orderOut(nil)
         grassWindow = nil
         for win in pokemonWindows {
-            (win.contentView as? GrassPetView)?.stopIdleJumping()
+            (win.contentView as? GrassPetView)?.stopIdleBehavior()
             win.orderOut(nil)
         }
         pokemonWindows.removeAll()
@@ -272,8 +321,6 @@ final class PartyStrip {
         }
     }
 
-    // MARK: - Internal
-
     fileprivate func handleTap(pokemonId: String) {
         onPokemonTapped?(pokemonId)
     }
@@ -287,15 +334,15 @@ final class PartyStrip {
                 petView.pokemonId = id
                 petView.imageView.image = PetCollection.spriteImage(for: id)
                 win.orderFront(nil)
-                petView.startIdleJumping()
+                petView.startIdleBehavior()
             } else {
                 petView.pokemonId = ""
                 petView.imageView.image = nil
-                petView.stopIdleJumping()
+                petView.stopIdleBehavior()
                 win.orderOut(nil)
             }
         }
-        // Bring grass in front of all Pokemon
+        // Grass in front
         grassWindow?.orderFront(nil)
     }
 }

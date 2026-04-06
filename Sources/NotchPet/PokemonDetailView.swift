@@ -68,6 +68,36 @@ final class PokemonDetailView: NSView {
     // MARK: - UI Construction
 
     private func buildUI() {
+        wantsLayer = true
+
+        // Environment background based on Pokemon type
+        let bgImageView = NSImageView()
+        bgImageView.imageScaling = .scaleAxesIndependently
+        bgImageView.translatesAutoresizingMaskIntoConstraints = false
+        if let envImage = MoveData.environmentImage(for: entry.id) {
+            bgImageView.image = envImage
+        }
+        addSubview(bgImageView)
+        NSLayoutConstraint.activate([
+            bgImageView.topAnchor.constraint(equalTo: topAnchor),
+            bgImageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bgImageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bgImageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        // Semi-transparent dark overlay so text is readable
+        let overlay = NSView()
+        overlay.wantsLayer = true
+        overlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        overlay.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(overlay)
+        NSLayoutConstraint.activate([
+            overlay.topAnchor.constraint(equalTo: topAnchor),
+            overlay.leadingAnchor.constraint(equalTo: leadingAnchor),
+            overlay.trailingAnchor.constraint(equalTo: trailingAnchor),
+            overlay.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
         // Container stack
         let stack = NSStackView()
         stack.orientation = .vertical

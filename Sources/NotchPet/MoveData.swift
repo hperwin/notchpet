@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 struct Move {
     let name: String
@@ -156,4 +157,27 @@ enum MoveData {
         "mew": [(1, "Pound"), (5, "Transform"), (10, "Psychic"), (15, "Aura Sphere"), (20, "Ancient Power")],
         "zoroark": [(1, "Scratch"), (5, "Pursuit"), (10, "Night Slash"), (15, "Foul Play"), (20, "Night Daze")],
     ]
+
+    /// Primary type for each Pokemon — determines environment background
+    static let pokemonTypes: [String: String] = [
+        "leafeon": "Grass", "eevee": "Normal", "pikachu": "Electric",
+        "charizard": "Fire", "mewtwo": "Psychic", "blaziken": "Fire",
+        "dragonite": "Dragon", "vaporeon": "Water", "jolteon": "Electric",
+        "flareon": "Fire", "espeon": "Psychic", "umbreon": "Dark",
+        "glaceon": "Ice", "sylveon": "Fairy", "gengar": "Ghost",
+        "lucario": "Fighting", "garchomp": "Dragon", "rayquaza": "Dragon",
+        "gyarados": "Water", "arcanine": "Fire", "gardevoir": "Psychic",
+        "tyranitar": "Rock", "salamence": "Dragon", "metagross": "Steel",
+        "absol": "Dark", "luxray": "Electric", "greninja": "Water",
+        "snorlax": "Normal", "mew": "Psychic", "zoroark": "Dark",
+    ]
+
+    /// Load the environment background image for a Pokemon's type
+    static func environmentImage(for pokemonId: String) -> NSImage? {
+        guard let type = pokemonTypes[pokemonId] else { return nil }
+        let fileName = type.lowercased()
+        guard let url = Bundle.module.url(forResource: "environments", withExtension: nil) else { return nil }
+        let imageURL = url.appendingPathComponent("\(fileName).png")
+        return NSImage(contentsOf: imageURL)
+    }
 }
