@@ -157,10 +157,11 @@ final class PartyStrip {
 
         let startX = auxRight.origin.x + 8
         let totalWidth = CGFloat(Self.slotCount) * (Self.pokemonSize + Self.spacing) - Self.spacing
-        let menuBarY = screen.frame.maxY - 32
+        let menuBarBottom = auxRight.origin.y  // bottom edge of the menu bar area
+        let menuBarHeight = auxRight.height     // 32pt
 
-        // --- Grass strip window (decorative, at the bottom of the menu bar) ---
-        let grassFrame = NSRect(x: startX - 4, y: menuBarY, width: totalWidth + 8, height: Self.grassHeight)
+        // --- Grass strip window (at the bottom of the menu bar) ---
+        let grassFrame = NSRect(x: startX - 4, y: menuBarBottom, width: totalWidth + 8, height: Self.grassHeight)
         let grassView = NSImageView(frame: NSRect(origin: .zero, size: grassFrame.size))
         grassView.imageScaling = .scaleAxesIndependently
         grassView.wantsLayer = true
@@ -189,8 +190,8 @@ final class PartyStrip {
         // --- Individual Pokemon windows (sitting in the grass) ---
         for i in 0..<Self.slotCount {
             let x = startX + CGFloat(i) * (Self.pokemonSize + Self.spacing)
-            // Pokemon sit with their bottom half behind the grass
-            let y = menuBarY + Self.grassHeight / 2 - Self.pokemonSize / 2 + 2
+            // Pokemon sit in the menu bar, vertically centered, slightly above the grass
+            let y = menuBarBottom + (menuBarHeight - Self.pokemonSize) / 2
 
             let petFrame = NSRect(x: x, y: y, width: Self.pokemonSize, height: Self.pokemonSize)
             let petView = GrassPetView(frame: NSRect(origin: .zero, size: petFrame.size))
@@ -213,8 +214,7 @@ final class PartyStrip {
             pokemonWindows.append(win)
         }
 
-        // Grass should appear IN FRONT of the Pokemon (they're behind it)
-        grassWin.order(.above, relativeTo: pokemonWindows.first?.windowNumber ?? 0)
+        // Grass renders in front — will be ordered after sprites are shown in refreshSprites()
 
         isVisible = true
         refreshSprites()
@@ -288,8 +288,6 @@ final class PartyStrip {
                 petView.imageView.image = PetCollection.spriteImage(for: id)
                 win.orderFront(nil)
                 petView.startIdleJumping()
-                // Keep grass in front
-                grassWindow?.order(.above, relativeTo: win.windowNumber)
             } else {
                 petView.pokemonId = ""
                 petView.imageView.image = nil
@@ -297,5 +295,7 @@ final class PartyStrip {
                 win.orderOut(nil)
             }
         }
+        // Bring grass in front of all Pokemon
+        grassWindow?.orderFront(nil)
     }
 }

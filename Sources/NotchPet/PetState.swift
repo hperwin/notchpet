@@ -231,9 +231,17 @@ final class PetState: Codable {
     private static let storageKey = "notchpet.petState"
 
     static func load() -> PetState {
-        guard let data = UserDefaults.standard.data(forKey: storageKey),
-              let state = try? JSONDecoder().decode(PetState.self, from: data)
-        else {
+        guard let data = UserDefaults.standard.data(forKey: storageKey) else {
+            let fresh = PetState()
+            fresh.initializeDefaults()
+            return fresh
+        }
+
+        let state: PetState
+        do {
+            state = try JSONDecoder().decode(PetState.self, from: data)
+        } catch {
+            NSLog("NotchPet: Failed to decode PetState: \(error). Using existing data as base.")
             let fresh = PetState()
             fresh.initializeDefaults()
             return fresh

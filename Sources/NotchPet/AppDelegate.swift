@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gameSystems.onEvent = { [weak self] event in
             self?.handleGameEvent(event)
         }
-        gameSystems.processAppLaunch()
+        // processAppLaunch moved to after all UI is set up (below)
 
         // Pet window
         petWindow = PetWindow()
@@ -137,6 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.gameSystems.tick()
         }
 
+        // Now that all UI is ready, process app launch (may fire events)
+        gameSystems.processAppLaunch()
+
         // Auto-launch on first run
         if !Preferences.shared.hasLaunchedBefore {
             Preferences.shared.hasLaunchedBefore = true
@@ -217,7 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         }
 
-        if panelWindow.isOpen {
+        if panelWindow != nil && panelWindow.isOpen {
             panelWindow.refreshData(petState)
         }
     }
@@ -273,12 +276,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func animatePetCelebration() {
-        let petView = petWindow.petView
-        let celebrate = CAKeyframeAnimation(keyPath: "transform.scale")
-        celebrate.values = [1.0, 1.3, 0.9, 1.1, 1.0]
-        celebrate.keyTimes = [0, 0.2, 0.5, 0.8, 1.0]
-        celebrate.duration = 0.5
-        petView.imageView.layer?.add(celebrate, forKey: "celebrate")
+        // No longer using the pet window — celebration is visual in the party strip
+        // Could add a party-wide bounce here in the future
     }
 
     // MARK: - Party Strip
