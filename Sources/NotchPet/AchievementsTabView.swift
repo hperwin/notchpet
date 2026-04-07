@@ -3,39 +3,39 @@ import AppKit
 final class AchievementsTabView: DSTabView {
 
     override var isFlipped: Bool { true }
+    override var disableHoverTracking: Bool { true }
 
     // Palette
-    private static let darkBg = NSColor(red: 0x11/255, green: 0x11/255, blue: 0x11/255, alpha: 1)
+    private static let darkBg = NSColor(red: 0x0d/255, green: 0x0d/255, blue: 0x0d/255, alpha: 1)
     private static let gold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
-    private static let cardBg = NSColor(red: 0x1e/255, green: 0x1e/255, blue: 0x1e/255, alpha: 1)
-    private static let cardBorder = NSColor(red: 0x33/255, green: 0x33/255, blue: 0x33/255, alpha: 1)
-    private static let descGray = NSColor(red: 0x88/255, green: 0x88/255, blue: 0x88/255, alpha: 1)
-    private static let trackColor = NSColor(red: 0x22/255, green: 0x22/255, blue: 0x22/255, alpha: 1)
-    private static let greenCheck = NSColor(red: 0x4C/255, green: 0xD9/255, blue: 0x64/255, alpha: 1)
+    private static let cardBg = NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1)
+    private static let descGray = NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1)
+    private static let trackColor = NSColor(red: 0x25/255, green: 0x25/255, blue: 0x25/255, alpha: 1)
+    private static let greenDone = NSColor(red: 0x34/255, green: 0xC7/255, blue: 0x59/255, alpha: 1)
+    private static let lockedText = NSColor(red: 0x55/255, green: 0x55/255, blue: 0x55/255, alpha: 1)
+    private static let progressText = NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1)
 
-    // Tier colors
-    private static let tierCommon = NSColor(red: 0x99/255, green: 0x99/255, blue: 0x99/255, alpha: 1)
+    // Tier icon colors
+    private static let tierCommonGold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
     private static let tierRare = NSColor(red: 0x4D/255, green: 0x80/255, blue: 0xFF/255, alpha: 1)
     private static let tierLegendary = NSColor(red: 0xFF/255, green: 0xD7/255, blue: 0x00/255, alpha: 1)
 
     // Layout
-    private static let rowHeight: CGFloat = 60
+    private static let rowHeight: CGFloat = 50
     private static let rowGap: CGFloat = 6
     private static let padX: CGFloat = 8
-    private static let padTop: CGFloat = 34
-    private static let cardWidth: CGFloat = 504  // 520 - 2*padX
+    private static let padTop: CGFloat = 38
+    private static let cardWidth: CGFloat = 504
 
     private let scrollView = NSScrollView()
     private let contentView = AchievementsFlippedView()
 
     init() {
-        super.init(backgroundColor: .clear)
+        super.init(backgroundColor: Self.darkBg)
         setupScrollView()
     }
 
     required init?(coder: NSCoder) { fatalError() }
-
-    override var disableHoverTracking: Bool { true }
 
     private func setupScrollView() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -55,9 +55,10 @@ final class AchievementsTabView: DSTabView {
         scrollView.documentView = contentView
     }
 
-    private func tierColor(_ tier: Achievement.Tier) -> NSColor {
+    private func tierIconColor(_ tier: Achievement.Tier, unlocked: Bool) -> NSColor {
+        guard unlocked else { return Self.trackColor }
         switch tier {
-        case .common: return Self.tierCommon
+        case .common: return Self.tierCommonGold
         case .rare: return Self.tierRare
         case .legendary: return Self.tierLegendary
         }
@@ -98,12 +99,10 @@ final class AchievementsTabView: DSTabView {
             if a.unlocked && !b.unlocked { return true }
             if !a.unlocked && b.unlocked { return false }
             if a.unlocked && b.unlocked {
-                // Both unlocked — sort by date (earliest first)
                 let da = a.unlockedDate ?? .distantPast
                 let db = b.unlockedDate ?? .distantPast
                 return da < db
             }
-            // Both locked — sort by progress (closest to completion first)
             let pa = progress(for: a, state: state)
             let pb = progress(for: b, state: state)
             let progA = pa.target > 0 ? Double(pa.current) / Double(pa.target) : 0
@@ -111,11 +110,36 @@ final class AchievementsTabView: DSTabView {
             return progA > progB
         }
 
-        // Header
-        let header = makeLabel("Achievements (\(unlockedCount)/\(totalCount))", size: 13, bold: true, color: Self.gold)
-        header.frame = NSRect(x: 0, y: 8, width: 520, height: 18)
-        header.alignment = .center
-        contentView.addSubview(header)
+        // Header: title + pill badge
+        let headerY: CGFloat = 8
+        let titleText = "Achievements"
+        let badgeText = "\(unlockedCount)/\(totalCount)"
+
+        let titleLabel = makeLabel(titleText, size: 13, bold: true, color: .white)
+        titleLabel.sizeToFit()
+        let badgeLabel = makeLabel(badgeText, size: 10, bold: true, color: NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1))
+        badgeLabel.sizeToFit()
+
+        let badgePadH: CGFloat = 8
+        let badgePadV: CGFloat = 2
+        let badgeW = badgeLabel.frame.width + badgePadH * 2
+        let badgeH = badgeLabel.frame.height + badgePadV * 2
+        let totalHeaderW = titleLabel.frame.width + 6 + badgeW
+        let headerX = (520 - totalHeaderW) / 2
+
+        titleLabel.frame = NSRect(x: headerX, y: headerY, width: titleLabel.frame.width, height: 18)
+        contentView.addSubview(titleLabel)
+
+        let pillX = headerX + titleLabel.frame.width + 6
+        let pillY = headerY + (18 - badgeH) / 2
+        let pill = NSView(frame: NSRect(x: pillX, y: pillY, width: badgeW, height: badgeH))
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = badgeH / 2
+        pill.layer?.backgroundColor = Self.gold.cgColor
+        contentView.addSubview(pill)
+
+        badgeLabel.frame = NSRect(x: badgePadH, y: badgePadV - 1, width: badgeLabel.frame.width, height: badgeLabel.frame.height)
+        pill.addSubview(badgeLabel)
 
         // Content height
         let contentHeight = Self.padTop + CGFloat(sorted.count) * (Self.rowHeight + Self.rowGap) + 10
@@ -125,62 +149,93 @@ final class AchievementsTabView: DSTabView {
             let rowY = Self.padTop + CGFloat(index) * (Self.rowHeight + Self.rowGap)
             let cardRect = NSRect(x: Self.padX, y: rowY, width: Self.cardWidth, height: Self.rowHeight)
 
-            // Card background
+            // Card background — no border
             let card = NSView(frame: cardRect)
             card.wantsLayer = true
-            card.layer?.cornerRadius = 8
+            card.layer?.cornerRadius = 10
             card.layer?.backgroundColor = Self.cardBg.cgColor
-            card.layer?.borderColor = Self.cardBorder.cgColor
-            card.layer?.borderWidth = 1
             contentView.addSubview(card)
 
-            // Left: star icon (inside card, relative coords)
-            let starText = ach.unlocked ? "\u{2605}" : "\u{25CB}"
-            let starColor = ach.unlocked ? Self.gold : NSColor.gray
-            let star = makeLabel(starText, size: 20, bold: true, color: starColor)
-            star.frame = NSRect(x: 10, y: (Self.rowHeight - 24) / 2, width: 24, height: 24)
-            star.alignment = .center
-            card.addSubview(star)
+            // Left: icon circle (28pt)
+            let circleSize: CGFloat = 28
+            let circleX: CGFloat = 8
+            let circleY: CGFloat = (Self.rowHeight - circleSize) / 2
+            let circleView = NSView(frame: NSRect(x: circleX, y: circleY, width: circleSize, height: circleSize))
+            circleView.wantsLayer = true
+            circleView.layer?.cornerRadius = circleSize / 2
+
+            let iconColor = tierIconColor(ach.tier, unlocked: ach.unlocked)
+            circleView.layer?.backgroundColor = iconColor.cgColor
+
+            // Legendary glow
+            if ach.unlocked && ach.tier == .legendary {
+                circleView.layer?.shadowColor = Self.tierLegendary.cgColor
+                circleView.layer?.shadowOffset = .zero
+                circleView.layer?.shadowRadius = 6
+                circleView.layer?.shadowOpacity = 0.7
+            }
+
+            card.addSubview(circleView)
+
+            // Icon text inside circle
+            let iconText: String
+            let iconColor2: NSColor
+            if ach.unlocked {
+                iconText = "\u{2713}"  // checkmark
+                iconColor2 = .white
+            } else {
+                iconText = "\u{25CB}"  // open circle
+                iconColor2 = NSColor(white: 0.4, alpha: 1)
+            }
+            let iconLabel = makeLabel(iconText, size: ach.unlocked ? 14 : 12, bold: true, color: iconColor2)
+            iconLabel.alignment = .center
+            iconLabel.frame = NSRect(x: 0, y: (circleSize - 16) / 2, width: circleSize, height: 16)
+            circleView.addSubview(iconLabel)
 
             // Middle: name + description
-            let nameColor: NSColor = ach.unlocked ? .white : NSColor(white: 0.7, alpha: 1)
+            let textX: CGFloat = 44
+            let rightAreaWidth: CGFloat = 100
+            let textW: CGFloat = Self.cardWidth - textX - rightAreaWidth - 12
+
+            let nameColor: NSColor = ach.unlocked ? .white : Self.lockedText
             let nameLabel = makeLabel(ach.name, size: 12, bold: true, color: nameColor)
-            nameLabel.frame = NSRect(x: 42, y: 10, width: 260, height: 16)
+            nameLabel.frame = NSRect(x: textX, y: 10, width: textW, height: 16)
             nameLabel.lineBreakMode = .byTruncatingTail
             card.addSubview(nameLabel)
 
             let descLabel = makeLabel(ach.description, size: 10, bold: false, color: Self.descGray)
-            descLabel.frame = NSRect(x: 42, y: 28, width: 260, height: 14)
+            descLabel.frame = NSRect(x: textX, y: 27, width: textW, height: 14)
             descLabel.lineBreakMode = .byTruncatingTail
             card.addSubview(descLabel)
 
-            // Right side
+            // Right side (100pt area)
+            let rightX: CGFloat = Self.cardWidth - rightAreaWidth - 8
+
             if ach.unlocked {
-                // Green checkmark
-                let check = makeLabel("\u{2713}", size: 16, bold: true, color: Self.greenCheck)
-                check.frame = NSRect(x: Self.cardWidth - 110, y: 10, width: 20, height: 20)
-                check.alignment = .center
-                card.addSubview(check)
+                // Green "Done" pill badge
+                let donePillW: CGFloat = 48
+                let donePillH: CGFloat = 20
+                let donePillY: CGFloat = (Self.rowHeight - donePillH) / 2
+                let donePill = NSView(frame: NSRect(x: rightX + (rightAreaWidth - donePillW) / 2, y: donePillY, width: donePillW, height: donePillH))
+                donePill.wantsLayer = true
+                donePill.layer?.cornerRadius = donePillH / 2
+                donePill.layer?.backgroundColor = Self.greenDone.cgColor
+                card.addSubview(donePill)
 
-                let doneLabel = makeLabel("Done", size: 10, bold: false, color: Self.greenCheck)
-                doneLabel.frame = NSRect(x: Self.cardWidth - 90, y: 13, width: 34, height: 14)
-                card.addSubview(doneLabel)
-
-                // XP badge
-                let xpBadge = makeLabel("+\(ach.xpReward) XP", size: 9, bold: true, color: Self.gold)
-                xpBadge.frame = NSRect(x: Self.cardWidth - 55, y: 13, width: 45, height: 14)
-                xpBadge.alignment = .right
-                card.addSubview(xpBadge)
+                let doneLabel = makeLabel("Done", size: 10, bold: true, color: .white)
+                doneLabel.alignment = .center
+                doneLabel.frame = NSRect(x: 0, y: 2, width: donePillW, height: 14)
+                donePill.addSubview(doneLabel)
             } else {
-                // Progress bar
+                // Progress bar + fraction text
                 let prog = progress(for: ach, state: state)
                 let clamped = min(prog.current, prog.target)
                 let fraction = prog.target > 0 ? CGFloat(clamped) / CGFloat(prog.target) : 0
 
-                let barX: CGFloat = Self.cardWidth - 160
-                let barW: CGFloat = 100
-                let barH: CGFloat = 10
-                let barY: CGFloat = (Self.rowHeight - barH) / 2
+                let barW: CGFloat = 88
+                let barH: CGFloat = 6
+                let barX: CGFloat = rightX + (rightAreaWidth - barW) / 2
+                let barY: CGFloat = 15
 
                 // Track
                 let track = NSView(frame: NSRect(x: barX, y: barY, width: barW, height: barH))
@@ -190,30 +245,19 @@ final class AchievementsTabView: DSTabView {
                 card.addSubview(track)
 
                 // Fill
-                let fillW = max(barW * fraction, fraction > 0 ? barH : 0)  // min width for visibility
+                let fillW = max(barW * fraction, fraction > 0 ? barH : 0)
                 let fill = NSView(frame: NSRect(x: 0, y: 0, width: fillW, height: barH))
                 fill.wantsLayer = true
                 fill.layer?.cornerRadius = barH / 2
                 fill.layer?.backgroundColor = Self.gold.cgColor
                 track.addSubview(fill)
 
-                // Progress text
-                let progText = makeLabel("\(clamped)/\(prog.target)", size: 9, bold: false, color: NSColor(white: 0.6, alpha: 1))
-                progText.frame = NSRect(x: barX + barW + 6, y: barY - 2, width: 50, height: 14)
-                card.addSubview(progText)
+                // Progress text below bar
+                let progLabel = makeLabel("\(clamped)/\(prog.target)", size: 9, bold: false, color: Self.progressText)
+                progLabel.alignment = .center
+                progLabel.frame = NSRect(x: barX, y: barY + barH + 3, width: barW, height: 12)
+                card.addSubview(progLabel)
             }
-
-            // Tier dot
-            let dotSize: CGFloat = 6
-            let dot = NSView(frame: NSRect(x: 42, y: Self.rowHeight - 14, width: dotSize, height: dotSize))
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = dotSize / 2
-            dot.layer?.backgroundColor = tierColor(ach.tier).cgColor
-            card.addSubview(dot)
-
-            let tierLabel = makeLabel(ach.tier.name, size: 8, bold: false, color: tierColor(ach.tier))
-            tierLabel.frame = NSRect(x: 52, y: Self.rowHeight - 16, width: 60, height: 12)
-            card.addSubview(tierLabel)
 
             // Hit region
             addHitRegion(HitRegion(id: "ach_\(index)", rect: cardRect, action: .showDetail(pokemonId: ach.id)))

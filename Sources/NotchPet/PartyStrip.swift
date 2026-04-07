@@ -49,6 +49,7 @@ private class GrassPetView: NSView {
     weak var strip: PartyStrip?
     var minX: CGFloat = 0
     var maxX: CGFloat = 10000
+    var homeX: CGFloat = 0
     private var dragStart: NSPoint = .zero
     private var windowStart: NSPoint = .zero
     private var jumpTimer: Timer?
@@ -92,8 +93,12 @@ private class GrassPetView: NSView {
         jump.duration = 0.25
         jump.timingFunction = CAMediaTimingFunction(name: .easeOut)
         imageView.layer?.add(jump, forKey: "idleJump")
-        let dx = CGFloat.random(in: -5...5)
-        let newX = max(minX, min(win.frame.origin.x + dx, maxX))
+        // Bias toward home position so they don't drift
+        let currentX = win.frame.origin.x
+        let distFromHome = homeX - currentX
+        let bias = distFromHome * 0.3  // gentle pull toward home
+        let dx = CGFloat.random(in: -4...4) + bias
+        let newX = max(minX, min(currentX + dx, maxX))
         win.setFrameOrigin(NSPoint(x: newX, y: win.frame.origin.y))
     }
 
@@ -206,6 +211,7 @@ final class PartyStrip {
             petView.strip = self
             petView.minX = patchX
             petView.maxX = patchX + patchWidth - Self.pokemonSize
+            petView.homeX = x
 
             let win = NSWindow(contentRect: petFrame, styleMask: .borderless, backing: .buffered, defer: false)
             win.level = .statusBar
@@ -315,7 +321,7 @@ final class PartyStrip {
         // Text overlay
         let label = NSTextField(labelWithString: "\(pokemonName) grew to Lv.\(newLevel)!")
         label.font = NSFont.boldSystemFont(ofSize: 11)
-        label.textColor = NSColor(red: 0.2, green: 0.15, blue: 0.0, alpha: 1)
+        label.textColor = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
         label.alignment = .center
         label.drawsBackground = false
         label.isBordered = false

@@ -155,22 +155,6 @@ final class PanelWindow: NSWindow {
         let bg = PanelBackgroundView(cornerRadius: bottomCornerRadius, fillColor: .black)
         contentView = bg
 
-        // Pokemon frame background image
-        let frameImageView = NSImageView()
-        frameImageView.imageScaling = .scaleAxesIndependently
-        frameImageView.translatesAutoresizingMaskIntoConstraints = false
-        if let url = Bundle.module.url(forResource: "bg_panel_frame", withExtension: "png"),
-           let img = NSImage(contentsOf: url) {
-            frameImageView.image = img
-        }
-        bg.addSubview(frameImageView)
-        NSLayoutConstraint.activate([
-            frameImageView.topAnchor.constraint(equalTo: bg.topAnchor),
-            frameImageView.leadingAnchor.constraint(equalTo: bg.leadingAnchor),
-            frameImageView.trailingAnchor.constraint(equalTo: bg.trailingAnchor),
-            frameImageView.bottomAnchor.constraint(equalTo: bg.bottomAnchor),
-        ])
-
         let mainContainer = NSView()
         mainContainer.translatesAutoresizingMaskIntoConstraints = false
         bg.addSubview(mainContainer)
