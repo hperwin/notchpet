@@ -10,22 +10,16 @@ final class PanelWindow: NSWindow {
     var onPartyChanged: (([String]) -> Void)?
 
     // Layout constants
-    private let panelWidth: CGFloat = 520
-    private let panelMaxHeight: CGFloat = 420
+    private let panelWidth: CGFloat = 580
+    private let panelMaxHeight: CGFloat = 500
     private let bottomCornerRadius: CGFloat = 12
     private let openDuration: TimeInterval = 0.3
     private let closeDuration: TimeInterval = 0.2
 
-    // Tab bar colors
-    private let tabBarBgColor = NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1)
-    private let tabActiveGold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
-    private let tabInactiveGray = NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1)
-    private let tabBorderColor = NSColor(red: 0x33/255, green: 0x33/255, blue: 0x33/255, alpha: 1)
-
     // Tab system
     private var tabs: [DSTab] = []
     private var currentTabIndex: Int = 0
-    private var tabButtons: [TabBarButton] = []
+    private var tabButtons: [RetroNavButton] = []
     private var tabContentArea: NSView!
     private var tabBarView: NSView?
     private var containerView: NSView?
@@ -282,17 +276,28 @@ final class PanelWindow: NSWindow {
     private func buildTabBar() -> NSView {
         let bar = NSView()
         bar.wantsLayer = true
-        bar.layer?.backgroundColor = tabBarBgColor.cgColor
         bar.translatesAutoresizingMaskIntoConstraints = false
 
-        // Subtle top border
+        // Blue gradient background
+        let gradient = CAGradientLayer()
+        gradient.colors = [DS.navBlueTop.cgColor, DS.navBlueBot.cgColor]
+        gradient.startPoint = CGPoint(x: 0.5, y: 0)
+        gradient.endPoint = CGPoint(x: 0.5, y: 1)
+        bar.layer?.addSublayer(gradient)
+
+        // 1pt light blue top border
         let topBorder = CALayer()
-        topBorder.backgroundColor = tabBorderColor.cgColor
+        let topBorderColor = NSColor(red: 0x50/255.0, green: 0x78/255.0, blue: 0xB0/255.0, alpha: 1)
+        topBorder.backgroundColor = topBorderColor.cgColor
         bar.layer?.addSublayer(topBorder)
 
         bar.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: bar, queue: .main) { _ in
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            gradient.frame = bar.bounds
             topBorder.frame = CGRect(x: 0, y: bar.bounds.height - 1, width: bar.bounds.width, height: 1)
+            CATransaction.commit()
         }
 
         let stack = NSStackView()
@@ -309,15 +314,10 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let tabDefs: [(String, String)] = [
-            ("pawprint.fill", "Party"),
-            ("square.grid.3x3.fill", "Box"),
-            ("chart.bar.fill", "Stats"),
-            ("star.fill", "Medals"),
-        ]
+        let labels = ["Party", "Box", "Stats", "Medals"]
         tabButtons.removeAll()
-        for (index, def) in tabDefs.enumerated() {
-            let btn = TabBarButton(symbolName: def.0, label: def.1, index: index) { [weak self] idx in
+        for (index, title) in labels.enumerated() {
+            let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
                 self?.switchToTab(idx)
             }
             stack.addArrangedSubview(btn)
@@ -331,11 +331,8 @@ final class PanelWindow: NSWindow {
     }
 
     private func updateTabBarAppearance() {
-        let gold = tabActiveGold
-        let gray = tabInactiveGray
         for btn in tabButtons {
-            let isActive = btn.tabIndex == currentTabIndex
-            btn.setActive(isActive, activeColor: gold, inactiveColor: gray)
+            btn.setActive(btn.tabIndex == currentTabIndex)
         }
     }
 
@@ -408,60 +405,74 @@ private final class PanelBackgroundView: NSView {
     }
 }
 
-// MARK: - Tab Bar Button (SF Symbol + label)
+// MARK: - RetroNavButton
 
-private class TabBarButton: NSView {
+private class RetroNavButton: NSView {
     let tabIndex: Int
-    private let iconView: NSImageView
     private let labelField: NSTextField
+    private let gradientLayer = CAGradientLayer()
+    private let dividerLayer = CALayer()
     private var onTap: ((Int) -> Void)?
 
-    init(symbolName: String, label: String, index: Int, onTap: @escaping (Int) -> Void) {
+    init(label: String, index: Int, onTap: @escaping (Int) -> Void) {
         self.tabIndex = index
         self.onTap = onTap
 
-        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: label)?
-            .withSymbolConfiguration(config)
-        let iv = NSImageView()
-        iv.image = image
-        iv.imageScaling = .scaleNone
-        iv.contentTintColor = .gray
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        self.iconView = iv
-
         let tf = NSTextField(labelWithString: label)
-        tf.font = NSFont.systemFont(ofSize: 9, weight: .medium)
-        tf.textColor = .gray
+        tf.font = NSFont.boldSystemFont(ofSize: 11)
+        tf.textColor = .white
         tf.alignment = .center
+        tf.drawsBackground = false
+        tf.isBordered = false
+        tf.isEditable = false
+        tf.shadow = DS.dsShadow()
         tf.translatesAutoresizingMaskIntoConstraints = false
         self.labelField = tf
 
         super.init(frame: .zero)
+        wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(iconView)
+        // Gradient fill
+        gradientLayer.colors = [DS.navInactiveTop.cgColor, DS.navInactiveBot.cgColor]
+        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0)
+        gradientLayer.endPoint = CGPoint(x: 0.5, y: 1)
+        layer?.addSublayer(gradientLayer)
+
+        // Right-side 1pt dark divider
+        dividerLayer.backgroundColor = NSColor(red: 0x18/255.0, green: 0x30/255.0, blue: 0x58/255.0, alpha: 1).cgColor
+        layer?.addSublayer(dividerLayer)
+
         addSubview(labelField)
-
         NSLayoutConstraint.activate([
-            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-
             labelField.centerXAnchor.constraint(equalTo: centerXAnchor),
-            labelField.topAnchor.constraint(equalTo: iconView.bottomAnchor, constant: 2),
+            labelField.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+
+        postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: self, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.gradientLayer.frame = self.bounds
+            self.dividerLayer.frame = CGRect(x: self.bounds.width - 1, y: 0, width: 1, height: self.bounds.height)
+            CATransaction.commit()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func setActive(_ active: Bool, activeColor: NSColor, inactiveColor: NSColor) {
+    func setActive(_ active: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         if active {
-            iconView.contentTintColor = .white
-            labelField.textColor = activeColor
+            gradientLayer.colors = [DS.navActiveGreenTop.cgColor, DS.navActiveGreenBot.cgColor]
+            labelField.textColor = NSColor(red: 0x1a/255.0, green: 0x3a/255.0, blue: 0x1a/255.0, alpha: 1)
         } else {
-            iconView.contentTintColor = inactiveColor
-            labelField.textColor = inactiveColor
+            gradientLayer.colors = [DS.navInactiveTop.cgColor, DS.navInactiveBot.cgColor]
+            labelField.textColor = .white
         }
+        CATransaction.commit()
     }
 
     override func mouseDown(with event: NSEvent) {

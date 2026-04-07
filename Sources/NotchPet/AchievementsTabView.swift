@@ -8,7 +8,6 @@ final class AchievementsTabView: DSTabView {
     // Palette
     private static let darkBg = NSColor(red: 0x0d/255, green: 0x0d/255, blue: 0x0d/255, alpha: 1)
     private static let gold = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
-    private static let cardBg = NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 1)
     private static let descGray = NSColor(red: 0x66/255, green: 0x66/255, blue: 0x66/255, alpha: 1)
     private static let trackColor = NSColor(red: 0x25/255, green: 0x25/255, blue: 0x25/255, alpha: 1)
     private static let greenDone = NSColor(red: 0x34/255, green: 0xC7/255, blue: 0x59/255, alpha: 1)
@@ -23,9 +22,9 @@ final class AchievementsTabView: DSTabView {
     // Layout
     private static let rowHeight: CGFloat = 50
     private static let rowGap: CGFloat = 6
-    private static let padX: CGFloat = 8
+    private static let padX: CGFloat = 10
     private static let padTop: CGFloat = 38
-    private static let cardWidth: CGFloat = 504
+    private static let cardWidth: CGFloat = 560
 
     private let scrollView = NSScrollView()
     private let contentView = AchievementsFlippedView()
@@ -91,6 +90,7 @@ final class AchievementsTabView: DSTabView {
         contentView.subviews.forEach { $0.removeFromSuperview() }
         clearHitRegions()
 
+        let panelWidth: CGFloat = 580
         let unlockedCount = state.achievements.filter(\.unlocked).count
         let totalCount = state.achievements.count
 
@@ -110,7 +110,7 @@ final class AchievementsTabView: DSTabView {
             return progA > progB
         }
 
-        // Header: title + pill badge
+        // Header: title + pill badge, centered
         let headerY: CGFloat = 8
         let titleText = "Achievements"
         let badgeText = "\(unlockedCount)/\(totalCount)"
@@ -125,7 +125,7 @@ final class AchievementsTabView: DSTabView {
         let badgeW = badgeLabel.frame.width + badgePadH * 2
         let badgeH = badgeLabel.frame.height + badgePadV * 2
         let totalHeaderW = titleLabel.frame.width + 6 + badgeW
-        let headerX = (520 - totalHeaderW) / 2
+        let headerX = (panelWidth - totalHeaderW) / 2
 
         titleLabel.frame = NSRect(x: headerX, y: headerY, width: titleLabel.frame.width, height: 18)
         contentView.addSubview(titleLabel)
@@ -143,17 +143,14 @@ final class AchievementsTabView: DSTabView {
 
         // Content height
         let contentHeight = Self.padTop + CGFloat(sorted.count) * (Self.rowHeight + Self.rowGap) + 10
-        contentView.frame = NSRect(x: 0, y: 0, width: 520, height: max(contentHeight, 380))
+        contentView.frame = NSRect(x: 0, y: 0, width: panelWidth, height: max(contentHeight, 380))
 
         for (index, ach) in sorted.enumerated() {
             let rowY = Self.padTop + CGFloat(index) * (Self.rowHeight + Self.rowGap)
             let cardRect = NSRect(x: Self.padX, y: rowY, width: Self.cardWidth, height: Self.rowHeight)
 
-            // Card background — no border
-            let card = NSView(frame: cardRect)
-            card.wantsLayer = true
-            card.layer?.cornerRadius = 10
-            card.layer?.backgroundColor = Self.cardBg.cgColor
+            // Card background — uses DS.makeCard for green border
+            let card = DS.makeCard(frame: cardRect)
             contentView.addSubview(card)
 
             // Left: icon circle (28pt)
@@ -237,19 +234,19 @@ final class AchievementsTabView: DSTabView {
                 let barX: CGFloat = rightX + (rightAreaWidth - barW) / 2
                 let barY: CGFloat = 15
 
-                // Track
+                // Track (DS.barTrack)
                 let track = NSView(frame: NSRect(x: barX, y: barY, width: barW, height: barH))
                 track.wantsLayer = true
                 track.layer?.cornerRadius = barH / 2
-                track.layer?.backgroundColor = Self.trackColor.cgColor
+                track.layer?.backgroundColor = DS.barTrack.cgColor
                 card.addSubview(track)
 
-                // Fill
+                // Fill (DS.greenFill)
                 let fillW = max(barW * fraction, fraction > 0 ? barH : 0)
                 let fill = NSView(frame: NSRect(x: 0, y: 0, width: fillW, height: barH))
                 fill.wantsLayer = true
                 fill.layer?.cornerRadius = barH / 2
-                fill.layer?.backgroundColor = Self.gold.cgColor
+                fill.layer?.backgroundColor = DS.greenFill.cgColor
                 track.addSubview(fill)
 
                 // Progress text below bar

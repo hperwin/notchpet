@@ -4,21 +4,7 @@ final class StatsTabView: DSTabView {
 
     override var isFlipped: Bool { true }
 
-    // Dark dashboard palette
-    private static let bgColor   = NSColor(red: 0x0d/255.0, green: 0x0d/255.0, blue: 0x0d/255.0, alpha: 1)
-    private static let cardBg    = NSColor(red: 0x1a/255.0, green: 0x1a/255.0, blue: 0x1a/255.0, alpha: 1)
-    private static let gold      = NSColor(red: 0xF8/255.0, green: 0xA8/255.0, blue: 0x00/255.0, alpha: 1)
-    private static let textPrimary   = NSColor.white
-    private static let textSecondary = NSColor(red: 0x77/255.0, green: 0x77/255.0, blue: 0x77/255.0, alpha: 1)
-    private static let pillBg    = NSColor(red: 0x25/255.0, green: 0x25/255.0, blue: 0x25/255.0, alpha: 1)
-    private static let xpBarBg   = NSColor(red: 0x33/255.0, green: 0x33/255.0, blue: 0x33/255.0, alpha: 1)
-    private static let xpBarFill = NSColor(red: 0x4C/255.0, green: 0xAF/255.0, blue: 0x50/255.0, alpha: 1)
-
-    // Layout constants
-    private static let outerPad: CGFloat = 8
-    private static let cardGap: CGFloat  = 10
-    private static let cardRadius: CGFloat = 12
-    private static let innerPad: CGFloat = 14
+    private static let bgColor = NSColor(red: 0x0d/255.0, green: 0x0d/255.0, blue: 0x0d/255.0, alpha: 1)
 
     init() {
         super.init(backgroundColor: StatsTabView.bgColor)
@@ -28,30 +14,11 @@ final class StatsTabView: DSTabView {
 
     // MARK: - Helpers
 
-    private func makeCard(frame: NSRect) -> NSView {
-        let card = NSView(frame: frame)
-        card.wantsLayer = true
-        card.layer?.backgroundColor = StatsTabView.cardBg.cgColor
-        card.layer?.cornerRadius = StatsTabView.cardRadius
-        return card
-    }
-
-    private func makeLabel(_ text: String, size: CGFloat, bold: Bool = false,
-                           color: NSColor = textPrimary) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = bold ? NSFont.boldSystemFont(ofSize: size) : NSFont.systemFont(ofSize: size)
-        label.textColor = color
-        label.drawsBackground = false
-        label.isBordered = false
-        label.isEditable = false
-        return label
-    }
-
     @discardableResult
     private func placeLabel(_ text: String, in parent: NSView, x: CGFloat, y: CGFloat,
                             size: CGFloat, bold: Bool = false,
-                            color: NSColor = textPrimary) -> NSTextField {
-        let label = makeLabel(text, size: size, bold: bold, color: color)
+                            color: NSColor = DS.textPrimary) -> NSTextField {
+        let label = DS.label(text, size: size, bold: bold, color: color)
         label.sizeToFit()
         label.frame.origin = NSPoint(x: x, y: y)
         parent.addSubview(label)
@@ -61,38 +28,20 @@ final class StatsTabView: DSTabView {
     private func makePill(_ text: String, in parent: NSView, x: CGFloat, y: CGFloat) -> CGFloat {
         let pad: CGFloat = 8
         let h: CGFloat = 20
-        let label = makeLabel(text, size: 9, bold: false, color: StatsTabView.textSecondary)
+        let label = DS.label(text, size: 9, bold: false, color: DS.textSecondary)
         label.sizeToFit()
         let pillW = label.frame.width + pad * 2
 
         let pill = NSView(frame: NSRect(x: x, y: y, width: pillW, height: h))
         pill.wantsLayer = true
-        pill.layer?.backgroundColor = StatsTabView.pillBg.cgColor
-        pill.layer?.cornerRadius = 6
+        pill.layer?.backgroundColor = DS.pillBg.cgColor
+        pill.layer?.cornerRadius = DS.pillRadius
         parent.addSubview(pill)
 
         label.frame.origin = NSPoint(x: pad, y: 3)
         pill.addSubview(label)
 
         return pillW
-    }
-
-    private func makeXPBar(in parent: NSView, x: CGFloat, y: CGFloat,
-                           width: CGFloat, height: CGFloat, progress: Double) {
-        let bg = NSView(frame: NSRect(x: x, y: y, width: width, height: height))
-        bg.wantsLayer = true
-        bg.layer?.backgroundColor = StatsTabView.xpBarBg.cgColor
-        bg.layer?.cornerRadius = height / 2
-        parent.addSubview(bg)
-
-        let fillWidth = max(0, width * CGFloat(min(progress, 1.0)))
-        if fillWidth > 0 {
-            let fill = NSView(frame: NSRect(x: 0, y: 0, width: fillWidth, height: height))
-            fill.wantsLayer = true
-            fill.layer?.backgroundColor = StatsTabView.xpBarFill.cgColor
-            fill.layer?.cornerRadius = height / 2
-            bg.addSubview(fill)
-        }
     }
 
     // MARK: - Update
@@ -102,36 +51,35 @@ final class StatsTabView: DSTabView {
         clearHitRegions()
         needsDisplay = true
 
-        let pad = StatsTabView.outerPad
-        let gap = StatsTabView.cardGap
-        let ip = StatsTabView.innerPad
-        let contentW: CGFloat = bounds.width - pad * 2
-        let cardW = (contentW - gap) / 2
-        let topCardH: CGFloat = 130
-        let partyCardH: CGFloat = 220
+        let pad = DS.outerPad
+        let gap = DS.cardGap
+        let ip = DS.innerPad
+        let contentW: CGFloat = 560  // 580 - 2*10
+        let cardW: CGFloat = 276     // (560 - 8) / 2
+        let topCardH: CGFloat = 140
+        let partyCardH: CGFloat = 275
 
-        // ── Top-left: Typing card ──
+        // ── Row 1 Left: Typing card ──
 
-        let typingCard = makeCard(frame: NSRect(x: pad, y: pad, width: cardW, height: topCardH))
+        let typingCard = DS.makeCard(frame: NSRect(x: pad, y: pad, width: cardW, height: topCardH))
         addSubview(typingCard)
 
-        placeLabel("Typing", in: typingCard, x: ip, y: ip - 2,
-                   size: 12, bold: true, color: StatsTabView.gold)
+        placeLabel("Typing", in: typingCard, x: ip, y: ip,
+                   size: 12, bold: true, color: DS.gold)
 
         // Big word count centered
         let wordStr = "\(state.totalWordsTyped)"
-        let bigLabel = placeLabel(wordStr, in: typingCard, x: 0, y: 36,
-                                  size: 28, bold: true, color: StatsTabView.textPrimary)
+        let bigLabel = placeLabel(wordStr, in: typingCard, x: 0, y: 40,
+                                  size: 28, bold: true, color: DS.textPrimary)
         bigLabel.frame.origin.x = (cardW - bigLabel.frame.width) / 2
 
-        let wordsLabel = placeLabel("words", in: typingCard, x: 0, y: 66,
-                                    size: 10, color: StatsTabView.textSecondary)
+        let wordsLabel = placeLabel("words", in: typingCard, x: 0, y: 72,
+                                    size: 10, color: DS.textSecondary)
         wordsLabel.frame.origin.x = (cardW - wordsLabel.frame.width) / 2
 
         // Bottom pill row
         let pillY: CGFloat = topCardH - 32
-        let pillStartX: CGFloat = ip
-        var px = pillStartX
+        var px: CGFloat = ip
 
         let wpmText = "WPM \(Int(state.currentWPM))"
         let w1 = makePill(wpmText, in: typingCard, x: px, y: pillY)
@@ -148,23 +96,23 @@ final class StatsTabView: DSTabView {
             _ = makePill(loginText, in: typingCard, x: px, y: pillY)
         }
 
-        // ── Top-right: Feeding card ──
+        // ── Row 1 Right: Feeding card ──
 
-        let feedingCard = makeCard(frame: NSRect(
+        let feedingCard = DS.makeCard(frame: NSRect(
             x: pad + cardW + gap, y: pad, width: cardW, height: topCardH))
         addSubview(feedingCard)
 
-        placeLabel("Feeding", in: feedingCard, x: ip, y: ip - 2,
-                   size: 12, bold: true, color: StatsTabView.gold)
+        placeLabel("Feeding", in: feedingCard, x: ip, y: ip,
+                   size: 12, bold: true, color: DS.gold)
 
         // Big berry count centered
         let berryStr = "\(state.totalFoodEaten)"
-        let berryLabel = placeLabel(berryStr, in: feedingCard, x: 0, y: 36,
-                                    size: 28, bold: true, color: StatsTabView.textPrimary)
+        let berryLabel = placeLabel(berryStr, in: feedingCard, x: 0, y: 40,
+                                    size: 28, bold: true, color: DS.textPrimary)
         berryLabel.frame.origin.x = (cardW - berryLabel.frame.width) / 2
 
-        let fedLabel = placeLabel("berries fed", in: feedingCard, x: 0, y: 66,
-                                  size: 10, color: StatsTabView.textSecondary)
+        let fedLabel = placeLabel("berries fed", in: feedingCard, x: 0, y: 72,
+                                  size: 10, color: DS.textSecondary)
         fedLabel.frame.origin.x = (cardW - fedLabel.frame.width) / 2
 
         // Compact per-pokemon feeding summary at bottom
@@ -178,30 +126,29 @@ final class StatsTabView: DSTabView {
         }
 
         if !feedParts.isEmpty {
-            // Split into two lines if more than 3
             let line1 = feedParts.prefix(3).joined(separator: " \u{00B7} ")
             placeLabel(line1, in: feedingCard, x: ip, y: topCardH - 34,
-                       size: 9, color: StatsTabView.textSecondary)
+                       size: 9, color: DS.textSecondary)
             if feedParts.count > 3 {
                 let line2 = feedParts.dropFirst(3).joined(separator: " \u{00B7} ")
                 placeLabel(line2, in: feedingCard, x: ip, y: topCardH - 20,
-                           size: 9, color: StatsTabView.textSecondary)
+                           size: 9, color: DS.textSecondary)
             }
         }
 
-        // ── Bottom: Party card (full width) ──
+        // ── Row 2: Party card (full width) ──
 
-        let partyY = pad + topCardH + gap
-        let partyCard = makeCard(frame: NSRect(
+        let partyY = pad + topCardH + gap  // 10 + 140 + 8 = 158
+        let partyCard = DS.makeCard(frame: NSRect(
             x: pad, y: partyY, width: contentW, height: partyCardH))
         addSubview(partyCard)
 
-        placeLabel("Party", in: partyCard, x: ip, y: 10,
-                   size: 12, bold: true, color: StatsTabView.gold)
+        placeLabel("Party", in: partyCard, x: ip, y: ip,
+                   size: 12, bold: true, color: DS.gold)
 
         // Party roster rows
-        let rowStartY: CGFloat = 32
-        let rowHeight: CGFloat = 30
+        let rowStartY: CGFloat = 36
+        let rowHeight: CGFloat = 36
         let spriteSize: CGFloat = 24
 
         for (i, pokemonId) in state.party.prefix(6).enumerated() {
@@ -209,10 +156,10 @@ final class StatsTabView: DSTabView {
             let entry = PetCollection.entry(for: pokemonId)
             let rowY = rowStartY + CGFloat(i) * rowHeight
 
-            // Sprite
+            // Sprite (pixel-art magnification)
             let shiny = state.useShiny && state.unlockedShinies.contains(pokemonId)
             let spriteView = NSImageView(frame: NSRect(
-                x: ip, y: rowY + 2, width: spriteSize, height: spriteSize))
+                x: ip, y: rowY + 6, width: spriteSize, height: spriteSize))
             spriteView.image = PetCollection.spriteImage(for: pokemonId, shiny: shiny)
             spriteView.imageScaling = .scaleProportionallyUpOrDown
             spriteView.wantsLayer = true
@@ -220,47 +167,40 @@ final class StatsTabView: DSTabView {
             partyCard.addSubview(spriteView)
 
             // Name
-            let nameX: CGFloat = ip + spriteSize + 8
+            let nameX: CGFloat = 46
             let displayName = entry?.displayName ?? pokemonId
-            placeLabel(displayName, in: partyCard, x: nameX, y: rowY + 5,
-                       size: 11, bold: true, color: StatsTabView.textPrimary)
+            placeLabel(displayName, in: partyCard, x: nameX, y: rowY + 8,
+                       size: 11, bold: true, color: DS.textPrimary)
 
             // Level
             let lvl = inst?.level ?? 1
-            let lvlLabel = placeLabel("Lv.\(lvl)", in: partyCard, x: nameX + 80, y: rowY + 6,
-                                      size: 9, color: StatsTabView.textSecondary)
-            _ = lvlLabel
+            placeLabel("Lv.\(lvl)", in: partyCard, x: nameX + 80, y: rowY + 9,
+                       size: 9, color: DS.textSecondary)
+
+            // Move name (far right, gold)
+            let topMove = inst?.moves.last ?? "--"
+            let moveLabel = DS.label(topMove, size: 10, bold: false, color: DS.gold)
+            moveLabel.sizeToFit()
+            let rightEdge = contentW - ip
+            moveLabel.frame.origin = NSPoint(x: rightEdge - moveLabel.frame.width, y: rowY + 8)
+            partyCard.addSubview(moveLabel)
+
+            // XP text (right-aligned before move)
+            let xpCur = inst?.xp ?? 0
+            let xpNext = inst?.xpToNextLevel ?? 100
+            let xpLabel = DS.label("\(xpCur)/\(xpNext)", size: 9, color: DS.textSecondary)
+            xpLabel.sizeToFit()
+            let xpTextX = rightEdge - moveLabel.frame.width - 10 - xpLabel.frame.width
+            xpLabel.frame.origin = NSPoint(x: xpTextX, y: rowY + 9)
+            partyCard.addSubview(xpLabel)
 
             // XP bar
             let barX: CGFloat = nameX + 118
-            let barH: CGFloat = 4
             let progress = inst?.levelProgress ?? 0
-
-            // XP text (right side)
-            let xpCur = inst?.xp ?? 0
-            let xpNext = inst?.xpToNextLevel ?? 100
-            let xpLabel = makeLabel("\(xpCur)/\(xpNext)", size: 9, color: StatsTabView.textSecondary)
-            xpLabel.sizeToFit()
-            let xpTextW = xpLabel.frame.width
-
-            // Top move (far right)
-            let topMove = inst?.moves.last ?? "--"
-            let moveLabel = makeLabel(topMove, size: 9, bold: false, color: StatsTabView.gold)
-            moveLabel.sizeToFit()
-            let moveLabelW = moveLabel.frame.width
-
-            let rightEdge = contentW - ip
-            moveLabel.frame.origin = NSPoint(x: rightEdge - moveLabelW, y: rowY + 6)
-            partyCard.addSubview(moveLabel)
-
-            let xpTextX = rightEdge - moveLabelW - 10 - xpTextW
-            xpLabel.frame.origin = NSPoint(x: xpTextX, y: rowY + 6)
-            partyCard.addSubview(xpLabel)
-
             let barW = xpTextX - barX - 8
-            if barW > 20 {
-                makeXPBar(in: partyCard, x: barX, y: rowY + 10,
-                          width: barW, height: barH, progress: progress)
+            if barW >= 20 {
+                DS.makeBar(in: partyCard, x: barX, y: rowY + 16,
+                           width: barW, progress: progress)
             }
         }
     }

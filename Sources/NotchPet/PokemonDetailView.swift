@@ -16,6 +16,7 @@ final class PokemonDetailView: NSView {
     private var spriteImageView: NSImageView?
     private var normalButton: NSButton?
     private var shinyButton: NSButton?
+    private var bounceTimer: Timer?
 
     // Type colors
     private static let typeColors: [String: NSColor] = [
@@ -54,24 +55,27 @@ final class PokemonDetailView: NSView {
     }
 
     private func startIdleBounce() {
-        guard let sprite = spriteImageView else { return }
-        sprite.wantsLayer = true
+        scheduleBounce()
+    }
 
-        // Small periodic hop every 3-6 seconds
-        func scheduleHop() {
-            let wait = Double.random(in: 3.0...6.0)
-            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak sprite] in
-                guard let layer = sprite?.layer else { return }
-                let hop = CAKeyframeAnimation(keyPath: "transform.translation.y")
-                hop.values = [0, -6, 0, -3, 0]
-                hop.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
-                hop.duration = 0.35
-                hop.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                layer.add(hop, forKey: "idleHop")
-                scheduleHop()
-            }
+    private func scheduleBounce() {
+        bounceTimer?.invalidate()
+        bounceTimer = Timer.scheduledTimer(withTimeInterval: Double.random(in: 3...6), repeats: false) { [weak self] _ in
+            guard let self = self, let sprite = self.spriteImageView else { return }
+            sprite.wantsLayer = true
+            let hop = CAKeyframeAnimation(keyPath: "transform.translation.y")
+            hop.values = [0, -6, 0, -3, 0]
+            hop.keyTimes = [0, 0.25, 0.5, 0.75, 1.0]
+            hop.duration = 0.35
+            sprite.layer?.add(hop, forKey: "idleHop")
+            self.scheduleBounce()
         }
-        scheduleHop()
+    }
+
+    override func removeFromSuperview() {
+        bounceTimer?.invalidate()
+        bounceTimer = nil
+        super.removeFromSuperview()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -239,7 +243,12 @@ final class PokemonDetailView: NSView {
             stack.addArrangedSubview(removeButton)
             removeButton.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
             removeButton.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
-        } else if !partyFull {
+        } else if partyFull {
+            let disabledButton = makeDisabledButton(title: "Party Full")
+            stack.addArrangedSubview(disabledButton)
+            disabledButton.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 16).isActive = true
+            disabledButton.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -16).isActive = true
+        } else {
             let addButton = makeActionButton(title: "Add to Party")
             addButton.target = self
             addButton.action = #selector(addToPartyTapped)
@@ -297,11 +306,13 @@ final class PokemonDetailView: NSView {
         let typeName = move?.type ?? "Normal"
         let typeColor = PokemonDetailView.typeColors[typeName] ?? PokemonDetailView.typeColors["Normal"]!
 
-        // Type badge
+        // Type badge with dark border for contrast
         let badge = NSView()
         badge.wantsLayer = true
         badge.layer?.backgroundColor = typeColor.cgColor
         badge.layer?.cornerRadius = 4
+        badge.layer?.borderColor = NSColor(red: 0x33/255, green: 0x33/255, blue: 0x33/255, alpha: 1).cgColor
+        badge.layer?.borderWidth = 1
         badge.translatesAutoresizingMaskIntoConstraints = false
 
         let badgeLabel = NSTextField(labelWithString: typeName)
@@ -380,10 +391,10 @@ final class PokemonDetailView: NSView {
     private func makeCard() -> NSView {
         let card = NSView()
         card.wantsLayer = true
-        card.layer?.backgroundColor = NSColor(red: 0.102, green: 0.102, blue: 0.102, alpha: 1).cgColor // #1a1a1a
-        card.layer?.cornerRadius = 10
-        card.layer?.borderColor = NSColor(red: 0.165, green: 0.165, blue: 0.165, alpha: 1).cgColor // #2a2a2a
-        card.layer?.borderWidth = 1
+        card.layer?.backgroundColor = DS.cardBg.cgColor
+        card.layer?.cornerRadius = DS.cardRadius
+        card.layer?.borderColor = DS.cardBorderColor.cgColor
+        card.layer?.borderWidth = DS.cardBorderWidth
         card.translatesAutoresizingMaskIntoConstraints = false
         return card
     }
@@ -446,6 +457,22 @@ final class PokemonDetailView: NSView {
         button.contentTintColor = .white
         let blueColor = NSColor(red: 0.29, green: 0.62, blue: 1.0, alpha: 1) // #4A9EFF
         button.layer?.backgroundColor = blueColor.cgColor
+        button.layer?.cornerRadius = 10
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.heightAnchor.constraint(equalToConstant: 36),
+        ])
+        return button
+    }
+
+    private func makeDisabledButton(title: String) -> NSButton {
+        let button = NSButton(title: title, target: nil, action: nil)
+        button.isBordered = false
+        button.wantsLayer = true
+        button.isEnabled = false
+        button.font = NSFont.boldSystemFont(ofSize: 14)
+        button.contentTintColor = NSColor(white: 0.5, alpha: 1)
+        button.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
         button.layer?.cornerRadius = 10
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
