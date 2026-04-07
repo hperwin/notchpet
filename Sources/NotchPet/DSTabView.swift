@@ -8,6 +8,7 @@ enum TabAction {
     case switchToTab(Int)
     case addToParty(id: String)
     case removeFromParty(id: String)
+    case reorderParty(newOrder: [String])
 }
 
 // MARK: - DS Tab Protocol

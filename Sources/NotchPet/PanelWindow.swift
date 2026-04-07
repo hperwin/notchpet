@@ -235,6 +235,13 @@ final class PanelWindow: NSWindow {
                 onPartyChanged?(state.party)
                 refreshData(state)
             }
+        case .reorderParty(let newOrder):
+            if let state = lastState {
+                state.party = newOrder
+                state.save()
+                onPartyChanged?(state.party)
+                refreshData(state)
+            }
         }
     }
 
