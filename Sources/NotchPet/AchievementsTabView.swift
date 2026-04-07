@@ -21,9 +21,9 @@ final class AchievementsTabView: DSTabView {
     // Layout
     private static let rowHeight: CGFloat = 60
     private static let rowGap: CGFloat = 6
-    private static let padX: CGFloat = 18
-    private static let padTop: CGFloat = 40
-    private static let cardWidth: CGFloat = 484  // 520 - 2*padX
+    private static let padX: CGFloat = 8
+    private static let padTop: CGFloat = 34
+    private static let cardWidth: CGFloat = 504  // 520 - 2*padX
 
     private let scrollView = NSScrollView()
     private let contentView = AchievementsFlippedView()

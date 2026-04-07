@@ -167,7 +167,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petState.pokemonInstances[leadId] = instance
         petState.save()
         petWindow.petView.playEatAnimation()
-        if leveledUp { animatePetCelebration() }
+        if leveledUp {
+            let name = PetCollection.entry(for: leadId)?.displayName ?? leadId
+            partyStrip.showLevelUp(pokemonName: name, newLevel: instance.level)
+        }
         if panelWindow.isOpen { panelWindow.refreshData(petState) }
     }
 
@@ -180,7 +183,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let leveledUp = instance.addXP(baseXP)
         petState.pokemonInstances[pokemonId] = instance
         petState.save()
-        if leveledUp { animatePetCelebration() }
+        if leveledUp {
+            let name = PetCollection.entry(for: pokemonId)?.displayName ?? pokemonId
+            partyStrip.showLevelUp(pokemonName: name, newLevel: instance.level)
+        }
         if panelWindow.isOpen { panelWindow.refreshData(petState) }
     }
 
@@ -198,9 +204,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleGameEvent(_ event: GameSystems.GameEvent) {
         switch event {
         case .levelUp(let level):
-            animatePetCelebration()
             updatePartyStrip()
             NSLog("NotchPet: Level up! Now level \(level)")
+            // Find which Pokemon hit this level
+            for id in petState.party {
+                if let inst = petState.pokemonInstances[id], inst.level == level {
+                    let name = PetCollection.entry(for: id)?.displayName ?? id
+                    partyStrip.showLevelUp(pokemonName: name, newLevel: level)
+                    break
+                }
+            }
 
         case .achievementUnlocked(let achievement):
             NSLog("NotchPet: Achievement unlocked: \(achievement.name)")
