@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 final class GameSystems {
     let state: PetState
@@ -6,6 +7,16 @@ final class GameSystems {
 
     private var tickCount: Int = 0
     private var keypressSinceLastSave: Int = 0
+
+    // Combo tracking (session-only, not persisted)
+    private(set) var comboStage: ComboStage = .none
+    private var comboStartTime: Date?
+    private var lastComboKeypressTime: Date?
+    private static let comboTimeout: TimeInterval = 30
+
+    // App tier tracking
+    private(set) var activeAppTier: AppTier = .normal
+    private var pollTimer: Timer?
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -28,10 +39,98 @@ final class GameSystems {
         case mutationOccurred(String)
         case challengeComplete(WeeklyChallenge)
         case streakUpdate(Int)
+        case comboChanged(ComboStage)
+        case appTierChanged(AppTier)
+    }
+
+    enum ComboStage: Comparable {
+        case none, warm, focused, deep, flow
+
+        var multiplier: Double {
+            switch self {
+            case .none: return 1.0
+            case .warm: return 1.5
+            case .focused: return 2.0
+            case .deep: return 3.0
+            case .flow: return 4.0
+            }
+        }
+
+        var label: String? {
+            switch self {
+            case .none: return nil
+            case .warm: return "x1.5"
+            case .focused: return "x2"
+            case .deep: return "x3"
+            case .flow: return "x4"
+            }
+        }
     }
 
     init(state: PetState) {
         self.state = state
+    }
+
+    func startPolling() {
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.pollTick()
+        }
+    }
+
+    func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
+
+    private func pollTick() {
+        if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+            let newTier = state.appTier(for: bundleID)
+            if newTier != activeAppTier {
+                activeAppTier = newTier
+                onEvent?(.appTierChanged(newTier))
+            }
+        }
+
+        if let lastKeypress = lastComboKeypressTime {
+            if Date().timeIntervalSince(lastKeypress) > Self.comboTimeout {
+                resetCombo()
+            } else {
+                updateComboStage()
+            }
+        }
+    }
+
+    private func updateComboStage() {
+        guard let start = comboStartTime else { return }
+        let elapsed = Date().timeIntervalSince(start)
+        let newStage: ComboStage
+        if elapsed >= 1800 {
+            newStage = .flow
+        } else if elapsed >= 900 {
+            newStage = .deep
+        } else if elapsed >= 300 {
+            newStage = .focused
+        } else if elapsed >= 60 {
+            newStage = .warm
+        } else {
+            newStage = .none
+        }
+
+        if newStage != comboStage {
+            comboStage = newStage
+            onEvent?(.comboChanged(newStage))
+        }
+    }
+
+    private func resetCombo() {
+        guard comboStage != .none || comboStartTime != nil else { return }
+        comboStartTime = nil
+        lastComboKeypressTime = nil
+        if comboStage != .none {
+            comboStage = .none
+            onEvent?(.comboChanged(.none))
+        }
     }
 
     // MARK: - Public API
@@ -40,22 +139,30 @@ final class GameSystems {
         state.totalKeysTyped += 1
         state.sessionKeysTyped += 1
 
-        // Every 5th keypress = XP to party
-        // Lead gets full XP, others get half rate (every 10th keypress)
-        if state.totalKeysTyped % 5 == 0 {
-            let baseGain = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier), 1)
-            for (i, pokemonId) in state.party.enumerated() {
-                guard var instance = state.pokemonInstances[pokemonId] else { continue }
-                if i == 0 {
-                    // Lead: full XP every 5 keystrokes
-                    let leveledUp = instance.addXP(baseGain)
-                    state.pokemonInstances[pokemonId] = instance
-                    if leveledUp { onEvent?(.levelUp(instance.level)) }
-                } else if state.totalKeysTyped % 10 == 0 {
-                    // Others: half rate (every 10 keystrokes)
-                    let leveledUp = instance.addXP(baseGain)
-                    state.pokemonInstances[pokemonId] = instance
-                    if leveledUp { onEvent?(.levelUp(instance.level)) }
+        // Feed combo timer
+        let now = Date()
+        if comboStartTime == nil {
+            comboStartTime = now
+        }
+        lastComboKeypressTime = now
+
+        // Every 10th keypress = XP to lead, every 20th = XP to rest of party
+        if state.totalKeysTyped % 10 == 0 {
+            let appMult = activeAppTier.multiplier
+            let comboMult = comboStage.multiplier
+            let baseGain = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier * appMult * comboMult), 0)
+            if baseGain > 0 {
+                for (i, pokemonId) in state.party.enumerated() {
+                    guard var instance = state.pokemonInstances[pokemonId] else { continue }
+                    if i == 0 {
+                        let leveledUp = instance.addXP(baseGain)
+                        state.pokemonInstances[pokemonId] = instance
+                        if leveledUp { onEvent?(.levelUp(instance.level)) }
+                    } else if state.totalKeysTyped % 20 == 0 {
+                        let leveledUp = instance.addXP(baseGain)
+                        state.pokemonInstances[pokemonId] = instance
+                        if leveledUp { onEvent?(.levelUp(instance.level)) }
+                    }
                 }
             }
         }
