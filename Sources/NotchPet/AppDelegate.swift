@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gameSystems.onEvent = { [weak self] event in
             self?.handleGameEvent(event)
         }
+        gameSystems.startPolling()
         // processAppLaunch moved to after all UI is set up (below)
 
         // Pet window
@@ -229,6 +230,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .streakUpdate(let streak):
             NSLog("NotchPet: Typing streak: \(streak) days")
 
+        case .comboChanged(let stage):
+            partyStrip.updateCombo(stage)
+            petState.currentComboLabel = stage.label ?? "x1"
+            if panelWindow.isOpen { panelWindow.refreshData(petState) }
+
+        case .appTierChanged(let tier):
+            NSLog("NotchPet: App tier changed to \(tier.name)")
+            petState.currentAppTierName = tier.name
+            if panelWindow.isOpen { panelWindow.refreshData(petState) }
+
         default:
             break
         }
@@ -311,6 +322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         walkController.stop()
         foodSpawner.stop()
         tickTimer?.invalidate()
+        gameSystems.stopPolling()
         petState.save()
     }
 }

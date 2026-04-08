@@ -136,9 +136,30 @@ final class StatsTabView: DSTabView {
             }
         }
 
+        // ── Row 1.5: Focus card (full width, compact) ──
+
+        let focusY = pad + topCardH + gap
+        let focusH: CGFloat = 32
+        let focusCard = DS.makeCard(frame: NSRect(
+            x: pad, y: focusY, width: contentW, height: focusH))
+        addSubview(focusCard)
+
+        let tierName = state.currentAppTierName
+        let comboLabel = state.currentComboLabel
+
+        var focusPx: CGFloat = ip
+        let focusTitle = placeLabel("Focus", in: focusCard, x: focusPx, y: 8,
+                                     size: 10, bold: true, color: DS.gold)
+        focusPx += focusTitle.frame.width + 10
+
+        let tierPillW = makePill("App: \(tierName)", in: focusCard, x: focusPx, y: 6)
+        focusPx += tierPillW + 6
+
+        _ = makePill("Combo: \(comboLabel)", in: focusCard, x: focusPx, y: 6)
+
         // ── Row 2: Party card (full width) ──
 
-        let partyY = pad + topCardH + gap  // 10 + 140 + 8 = 158
+        let partyY = pad + topCardH + gap + focusH + gap
         let partyCard = DS.makeCard(frame: NSRect(
             x: pad, y: partyY, width: contentW, height: partyCardH))
         addSubview(partyCard)

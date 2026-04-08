@@ -216,6 +216,10 @@ final class PetState: Codable {
     var sessionKeysTyped: Int = 0
     var currentWPM: Double = 0
 
+    // Session-only display state (not persisted)
+    var currentAppTierName: String = "Normal"
+    var currentComboLabel: String = "x1"
+
     // Streaks
     var typingStreak: Int = 0       // consecutive typing days
     var longestTypingStreak: Int = 0
@@ -249,6 +253,17 @@ final class PetState: Codable {
 
     // App tiers
     var appTierOverrides: [String: AppTier] = [:]
+
+    enum CodingKeys: String, CodingKey {
+        case xp, level, totalXPEarned, pokemonInstances
+        case totalKeysTyped, totalWordsTyped, sessionKeysTyped, currentWPM
+        case typingStreak, longestTypingStreak, loginStreak, longestLoginStreak
+        case lastTypingDate, lastLoginDate
+        case cosmetics, activeCosmetic, achievements
+        case restXP, lastActiveTime, sessionActiveMinutes
+        case party, useShiny, unlockedShinies
+        case mutationColor, weeklyChallenge, appTierOverrides
+    }
 
     // MARK: - Computed properties
 
