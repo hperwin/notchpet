@@ -172,6 +172,9 @@ final class PartyStrip {
     private var isVisible = false
     private var levelUpWindow: NSWindow?
     private var levelUpTimer: Timer?
+    private var comboBadgeWindow: NSWindow?
+    private var comboBadgeLabel: NSTextField?
+    private var currentComboStage: GameSystems.ComboStage = .none
 
     private static let grassHeight: CGFloat = 7
     private static let pokemonSize: CGFloat = 26
@@ -306,25 +309,24 @@ final class PartyStrip {
 
         let popupFrame = NSRect(x: centerX, y: y, width: popupW, height: popupH)
 
-        // Background image
+        // Programmatic banner — no image, just drawn in code
         let bgView = NSView(frame: NSRect(origin: .zero, size: popupFrame.size))
         bgView.wantsLayer = true
+        bgView.layer?.cornerRadius = 8
+        bgView.layer?.backgroundColor = NSColor(red: 0x1a/255, green: 0x1a/255, blue: 0x1a/255, alpha: 0.95).cgColor
+        bgView.layer?.borderColor = DS.gold.cgColor
+        bgView.layer?.borderWidth = 2
 
-        let bgImage = NSImageView(frame: NSRect(origin: .zero, size: popupFrame.size))
-        bgImage.imageScaling = .scaleAxesIndependently
-        if let url = Bundle.module.url(forResource: "levelup_banner", withExtension: "png"),
-           let img = NSImage(contentsOf: url) {
-            bgImage.image = img
-        }
-        bgView.addSubview(bgImage)
+        // Gold accent line at top
+        let topAccent = NSView(frame: NSRect(x: 2, y: 0, width: popupW - 4, height: 2))
+        topAccent.wantsLayer = true
+        topAccent.layer?.backgroundColor = DS.gold.cgColor
+        bgView.addSubview(topAccent)
 
-        // Text overlay
-        let label = NSTextField(labelWithString: "\(pokemonName) grew to Lv.\(newLevel)!")
-        label.font = NSFont.boldSystemFont(ofSize: 11)
-        label.textColor = NSColor(red: 0xF8/255, green: 0xA8/255, blue: 0x00/255, alpha: 1)
+        // Text
+        let label = DS.label("\(pokemonName) grew to Lv.\(newLevel)!", size: 12, bold: true, color: DS.gold)
+        label.translatesAutoresizingMaskIntoConstraints = true
         label.alignment = .center
-        label.drawsBackground = false
-        label.isBordered = false
         label.frame = NSRect(x: 0, y: (popupH - 16) / 2, width: popupW, height: 16)
         bgView.addSubview(label)
 
@@ -357,6 +359,137 @@ final class PartyStrip {
                 self?.levelUpWindow = nil
             })
         }
+    }
+
+    // MARK: - Combo Badge
+
+    func updateCombo(_ stage: GameSystems.ComboStage) {
+        guard stage != currentComboStage else { return }
+        let oldStage = currentComboStage
+        currentComboStage = stage
+
+        if stage == .none {
+            hideCombo()
+            return
+        }
+
+        guard let label = stage.label else { return }
+
+        if comboBadgeWindow == nil {
+            createComboBadge()
+        }
+
+        guard let badgeWin = comboBadgeWindow,
+              let badgeLabel = comboBadgeLabel else { return }
+
+        badgeLabel.stringValue = label
+        let color = comboColor(for: stage)
+        badgeWin.contentView?.layer?.backgroundColor = color.withAlphaComponent(0.85).cgColor
+        badgeWin.contentView?.layer?.borderColor = color.cgColor
+
+        if oldStage == .none {
+            badgeWin.alphaValue = 0
+            badgeWin.orderFront(nil)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.3
+                badgeWin.animator().alphaValue = 1
+            }
+        }
+
+        if stage > oldStage && oldStage != .none {
+            let pulse = CAKeyframeAnimation(keyPath: "transform.scale")
+            pulse.values = [1.0, 1.3, 1.0]
+            pulse.keyTimes = [0, 0.4, 1.0]
+            pulse.duration = 0.3
+            badgeWin.contentView?.layer?.add(pulse, forKey: "stagePulse")
+        }
+
+        if stage == .flow {
+            addFlameToLead()
+        } else {
+            removeFlameFromLead()
+        }
+    }
+
+    private func createComboBadge() {
+        guard let leadWin = pokemonWindows.first, leadWin.isVisible else { return }
+        let leadFrame = leadWin.frame
+        let badgeW: CGFloat = 32
+        let badgeH: CGFloat = 16
+        let badgeX = leadFrame.maxX + 2
+        let badgeY = leadFrame.maxY - badgeH - 2
+
+        let badgeFrame = NSRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
+
+        let bgView = NSView(frame: NSRect(origin: .zero, size: badgeFrame.size))
+        bgView.wantsLayer = true
+        bgView.layer?.cornerRadius = 4
+        bgView.layer?.borderWidth = 1
+
+        let label = NSTextField(labelWithString: "")
+        label.font = NSFont.boldSystemFont(ofSize: 9)
+        label.textColor = .white
+        label.alignment = .center
+        label.isBordered = false
+        label.drawsBackground = false
+        label.isEditable = false
+        label.frame = NSRect(x: 0, y: 1, width: badgeW, height: badgeH - 2)
+        bgView.addSubview(label)
+        comboBadgeLabel = label
+
+        let win = NSWindow(contentRect: badgeFrame, styleMask: .borderless, backing: .buffered, defer: false)
+        win.level = .statusBar
+        win.backgroundColor = .clear
+        win.isOpaque = false
+        win.hasShadow = false
+        win.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        win.ignoresMouseEvents = true
+        win.contentView = bgView
+        comboBadgeWindow = win
+    }
+
+    private func hideCombo() {
+        guard let win = comboBadgeWindow else { return }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            win.animator().alphaValue = 0
+        }, completionHandler: {
+            win.orderOut(nil)
+        })
+        removeFlameFromLead()
+    }
+
+    private func comboColor(for stage: GameSystems.ComboStage) -> NSColor {
+        switch stage {
+        case .none: return .clear
+        case .warm: return NSColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        case .focused: return NSColor(red: 0.3, green: 0.5, blue: 1.0, alpha: 1)
+        case .deep: return NSColor(red: 1.0, green: 0.6, blue: 0.2, alpha: 1)
+        case .flow: return NSColor(red: 1.0, green: 0.85, blue: 0.0, alpha: 1)
+        }
+    }
+
+    private func addFlameToLead() {
+        guard let leadWin = pokemonWindows.first,
+              let petView = leadWin.contentView as? GrassPetView else { return }
+        petView.layer?.shadowColor = NSColor(red: 1.0, green: 0.6, blue: 0.0, alpha: 1).cgColor
+        petView.layer?.shadowRadius = 6
+        petView.layer?.shadowOpacity = 0.8
+        petView.layer?.shadowOffset = .zero
+        let pulse = CABasicAnimation(keyPath: "shadowOpacity")
+        pulse.fromValue = 0.5
+        pulse.toValue = 1.0
+        pulse.duration = 0.6
+        pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        petView.layer?.add(pulse, forKey: "flowFlame")
+    }
+
+    private func removeFlameFromLead() {
+        guard let leadWin = pokemonWindows.first,
+              let petView = leadWin.contentView as? GrassPetView else { return }
+        petView.layer?.removeAnimation(forKey: "flowFlame")
+        petView.layer?.shadowOpacity = 0
     }
 
     // MARK: - Internal
