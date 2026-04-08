@@ -192,8 +192,9 @@ final class PanelWindow: NSWindow {
         let collection = CollectionTabView()
         let stats = StatsTabView()
         let achievements = AchievementsTabView()
+        let appSettings = AppSettingsTabView()
 
-        tabs = [party, collection, stats, achievements]
+        tabs = [party, collection, stats, achievements, appSettings]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -240,6 +241,31 @@ final class PanelWindow: NSWindow {
                 state.party = newOrder
                 state.save()
                 onPartyChanged?(state.party)
+                refreshData(state)
+            }
+        case .cycleTier(let bundleID):
+            if let state = lastState {
+                let current = state.appTier(for: bundleID)
+                let next: AppTier
+                switch current {
+                case .deepWork: next = .normal
+                case .normal: next = .distraction
+                case .distraction: next = .deepWork
+                }
+                let defaultTier: AppTier
+                if PetState.defaultDeepWorkBundleIDs.contains(bundleID) {
+                    defaultTier = .deepWork
+                } else if PetState.defaultDistractionBundleIDs.contains(bundleID) {
+                    defaultTier = .distraction
+                } else {
+                    defaultTier = .normal
+                }
+                if next == defaultTier {
+                    state.appTierOverrides.removeValue(forKey: bundleID)
+                } else {
+                    state.appTierOverrides[bundleID] = next
+                }
+                state.save()
                 refreshData(state)
             }
         }
@@ -321,7 +347,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Stats", "Medals"]
+        let labels = ["Party", "Box", "Stats", "Medals", "Apps"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in

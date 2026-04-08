@@ -9,6 +9,7 @@ enum TabAction {
     case addToParty(id: String)
     case removeFromParty(id: String)
     case reorderParty(newOrder: [String])
+    case cycleTier(bundleID: String)
 }
 
 // MARK: - DS Tab Protocol
