@@ -132,6 +132,38 @@ struct WeeklyChallenge: Codable {
     var progress: Double { min(Double(currentValue) / Double(targetValue), 1.0) }
 }
 
+// MARK: - App Tier
+
+enum AppTier: Int, Codable, CaseIterable {
+    case deepWork = 2
+    case normal = 1
+    case distraction = 0
+
+    var multiplier: Double {
+        switch self {
+        case .deepWork: return 3.0
+        case .normal: return 1.0
+        case .distraction: return 0.0
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .deepWork: return "Deep Work"
+        case .normal: return "Normal"
+        case .distraction: return "Distraction"
+        }
+    }
+
+    var color: (r: CGFloat, g: CGFloat, b: CGFloat) {
+        switch self {
+        case .deepWork: return (0.3, 0.8, 0.3)
+        case .normal: return (0.6, 0.6, 0.6)
+        case .distraction: return (0.9, 0.3, 0.3)
+        }
+    }
+}
+
 // MARK: - Pokemon Instance
 
 struct PokemonInstance: Codable, Identifiable {
@@ -214,6 +246,9 @@ final class PetState: Codable {
 
     // Weekly challenge
     var weeklyChallenge: WeeklyChallenge?
+
+    // App tiers
+    var appTierOverrides: [String: AppTier] = [:]
 
     // MARK: - Computed properties
 
@@ -321,6 +356,41 @@ final class PetState: Codable {
 
     var totalMultiplier: Double {
         streakMultiplier * fatigueMultiplier
+    }
+
+    // MARK: - Default App Tiers
+
+    static let defaultDeepWorkBundleIDs: Set<String> = [
+        "com.apple.dt.Xcode",
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "com.microsoft.VSCode",
+        "com.todesktop.230313mzl4w4u92",  // Cursor
+        "com.figma.Desktop",
+        "com.apple.LogicPro",
+        "com.apple.FinalCut",
+        "net.kovidgoyal.kitty",
+        "com.sublimetext.4",
+        "com.jetbrains.intellij",
+    ]
+
+    static let defaultDistractionBundleIDs: Set<String> = [
+        "com.twitter.twitter-mac",
+        "com.reddit.Reddit",
+        "com.zhiliaoapp.musically",
+        "com.burbn.instagram",
+        "com.google.Chrome.app.youtube",
+        "com.hnc.Discord",
+        "tv.twitch.TwitchDesktop",
+    ]
+
+    func appTier(for bundleID: String) -> AppTier {
+        if let override = appTierOverrides[bundleID] {
+            return override
+        }
+        if Self.defaultDeepWorkBundleIDs.contains(bundleID) { return .deepWork }
+        if Self.defaultDistractionBundleIDs.contains(bundleID) { return .distraction }
+        return .normal
     }
 
     // MARK: - Built-in achievements
