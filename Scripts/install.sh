@@ -14,6 +14,10 @@ fi
 
 echo "Installing $APP_NAME to $INSTALL_DIR..."
 
+# Kill running instance
+killall "$APP_NAME" 2>/dev/null || true
+sleep 1
+
 if [ -d "$INSTALL_DIR/$APP_NAME.app" ]; then
     echo "Removing previous installation..."
     rm -rf "$INSTALL_DIR/$APP_NAME.app"
@@ -25,3 +29,8 @@ echo "Installed to $INSTALL_DIR/$APP_NAME.app"
 echo ""
 echo "Launching $APP_NAME..."
 open "$INSTALL_DIR/$APP_NAME.app"
+echo ""
+echo "IMPORTANT: Grant accessibility permission when prompted, or go to:"
+echo "  System Settings → Privacy & Security → Accessibility → enable NotchPet"
+echo ""
+echo "If typing isn't tracked, toggle NotchPet OFF then ON in Accessibility settings."

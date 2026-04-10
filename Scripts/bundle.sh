@@ -13,15 +13,13 @@ swift build -c release 2>&1
 echo "Creating app bundle..."
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
-mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp ".build/release/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/"
-cp "Resources/blob.png" "$APP_BUNDLE/Contents/Resources/" 2>/dev/null || true
 
-# Copy SPM resource bundle (contains blob.png for Bundle.module)
+# Copy SPM resource bundle next to the binary (where Bundle.module expects it)
 if [ -d ".build/release/NotchPet_NotchPet.bundle" ]; then
-    cp -r ".build/release/NotchPet_NotchPet.bundle" "$APP_BUNDLE/Contents/Resources/"
+    cp -r ".build/release/NotchPet_NotchPet.bundle" "$APP_BUNDLE/Contents/MacOS/"
 fi
 
 echo "App bundle created at: $APP_BUNDLE"
