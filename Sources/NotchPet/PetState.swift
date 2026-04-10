@@ -202,6 +202,7 @@ struct PokemonInstance: Codable, Identifiable {
 // MARK: - Pet State (persisted)
 
 final class PetState: Codable {
+    init() {}
     // XP & Level
     var xp: Int = 0 // DEPRECATED - will be removed
     var level: Int = 1 // DEPRECATED - will be removed
@@ -216,7 +217,7 @@ final class PetState: Codable {
     var sessionKeysTyped: Int = 0
     var currentWPM: Double = 0
 
-    // Session-only display state (not persisted)
+    // Session-only display state (excluded from Codable via custom init)
     var currentAppTierName: String = "Normal"
     var currentComboLabel: String = "x1"
 
@@ -254,7 +255,9 @@ final class PetState: Codable {
     // App tiers
     var appTierOverrides: [String: AppTier] = [:]
 
-    enum CodingKeys: String, CodingKey {
+    // Custom Codable — decodes all persisted keys tolerantly (missing = default),
+    // and excludes session-only fields (currentAppTierName, currentComboLabel).
+    private enum CodingKeys: String, CodingKey {
         case xp, level, totalXPEarned, pokemonInstances
         case totalKeysTyped, totalWordsTyped, sessionKeysTyped, currentWPM
         case typingStreak, longestTypingStreak, loginStreak, longestLoginStreak
@@ -263,6 +266,36 @@ final class PetState: Codable {
         case restXP, lastActiveTime, sessionActiveMinutes
         case party, useShiny, unlockedShinies
         case mutationColor, weeklyChallenge, appTierOverrides
+    }
+
+    required init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        xp = (try? c.decode(Int.self, forKey: .xp)) ?? 0
+        level = (try? c.decode(Int.self, forKey: .level)) ?? 1
+        totalXPEarned = (try? c.decode(Int.self, forKey: .totalXPEarned)) ?? 0
+        pokemonInstances = (try? c.decode([String: PokemonInstance].self, forKey: .pokemonInstances)) ?? [:]
+        totalKeysTyped = (try? c.decode(Int.self, forKey: .totalKeysTyped)) ?? 0
+        totalWordsTyped = (try? c.decode(Int.self, forKey: .totalWordsTyped)) ?? 0
+        sessionKeysTyped = (try? c.decode(Int.self, forKey: .sessionKeysTyped)) ?? 0
+        currentWPM = (try? c.decode(Double.self, forKey: .currentWPM)) ?? 0
+        typingStreak = (try? c.decode(Int.self, forKey: .typingStreak)) ?? 0
+        longestTypingStreak = (try? c.decode(Int.self, forKey: .longestTypingStreak)) ?? 0
+        loginStreak = (try? c.decode(Int.self, forKey: .loginStreak)) ?? 0
+        longestLoginStreak = (try? c.decode(Int.self, forKey: .longestLoginStreak)) ?? 0
+        lastTypingDate = try? c.decode(String.self, forKey: .lastTypingDate)
+        lastLoginDate = try? c.decode(String.self, forKey: .lastLoginDate)
+        cosmetics = (try? c.decode([Cosmetic].self, forKey: .cosmetics)) ?? []
+        activeCosmetic = try? c.decode(String.self, forKey: .activeCosmetic)
+        achievements = (try? c.decode([Achievement].self, forKey: .achievements)) ?? []
+        restXP = (try? c.decode(Int.self, forKey: .restXP)) ?? 0
+        lastActiveTime = try? c.decode(Date.self, forKey: .lastActiveTime)
+        sessionActiveMinutes = (try? c.decode(Int.self, forKey: .sessionActiveMinutes)) ?? 0
+        party = (try? c.decode([String].self, forKey: .party)) ?? ["leafeon"]
+        useShiny = (try? c.decode(Bool.self, forKey: .useShiny)) ?? false
+        unlockedShinies = (try? c.decode([String].self, forKey: .unlockedShinies)) ?? []
+        mutationColor = try? c.decode(String.self, forKey: .mutationColor)
+        weeklyChallenge = try? c.decode(WeeklyChallenge.self, forKey: .weeklyChallenge)
+        appTierOverrides = (try? c.decode([String: AppTier].self, forKey: .appTierOverrides)) ?? [:]
     }
 
     // MARK: - Computed properties

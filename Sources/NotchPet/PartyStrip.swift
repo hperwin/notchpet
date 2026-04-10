@@ -412,36 +412,36 @@ final class PartyStrip {
     }
 
     private func createComboBadge() {
-        guard let leadWin = pokemonWindows.first, leadWin.isVisible else { return }
-        let leadFrame = leadWin.frame
-        let badgeW: CGFloat = 32
-        let badgeH: CGFloat = 16
-        let badgeX = leadFrame.maxX + 2
-        let badgeY = leadFrame.maxY - badgeH - 2
+        guard let screen = NSScreen.main else { return }
 
-        let badgeFrame = NSRect(x: badgeX, y: badgeY, width: badgeW, height: badgeH)
+        let badgeW: CGFloat = 44
+        let badgeH: CGFloat = 20
+        let centerX = screen.frame.midX - badgeW / 2
+        let y = screen.frame.maxY - 32 - badgeH - 4  // same position as level-up banner
+
+        let badgeFrame = NSRect(x: centerX, y: y, width: badgeW, height: badgeH)
 
         let bgView = NSView(frame: NSRect(origin: .zero, size: badgeFrame.size))
         bgView.wantsLayer = true
-        bgView.layer?.cornerRadius = 4
+        bgView.layer?.cornerRadius = 6
         bgView.layer?.borderWidth = 1
 
         let label = NSTextField(labelWithString: "")
-        label.font = NSFont.boldSystemFont(ofSize: 9)
+        label.font = NSFont.boldSystemFont(ofSize: 10)
         label.textColor = .white
         label.alignment = .center
         label.isBordered = false
         label.drawsBackground = false
         label.isEditable = false
-        label.frame = NSRect(x: 0, y: 1, width: badgeW, height: badgeH - 2)
+        label.frame = NSRect(x: 0, y: 2, width: badgeW, height: badgeH - 4)
         bgView.addSubview(label)
         comboBadgeLabel = label
 
         let win = NSWindow(contentRect: badgeFrame, styleMask: .borderless, backing: .buffered, defer: false)
-        win.level = .statusBar
+        win.level = .statusBar + 1
         win.backgroundColor = .clear
         win.isOpaque = false
-        win.hasShadow = false
+        win.hasShadow = true
         win.collectionBehavior = [.canJoinAllSpaces, .stationary]
         win.ignoresMouseEvents = true
         win.contentView = bgView

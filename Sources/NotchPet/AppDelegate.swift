@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var foodSpawner: FoodSpawner!
     private var partyStrip: PartyStrip!
     private var tickTimer: Timer?
+    private var panelRefreshNeeded: Bool = false
+    private var panelRefreshTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Load persistent state
@@ -120,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboardMonitor = KeyboardMonitor()
         keyboardMonitor.onKeypress = { [weak self] in
             self?.gameSystems.recordKeypress()
+            self?.panelRefreshNeeded = true
         }
         keyboardMonitor.onWordBoundary = { [weak self] in
             self?.gameSystems.recordWord()
@@ -136,6 +139,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Tick timer
         tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.gameSystems.tick()
+        }
+
+        // Throttled panel refresh — updates XP display every 2s while typing
+        panelRefreshTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self = self, self.panelRefreshNeeded else { return }
+            self.panelRefreshNeeded = false
+            if self.panelWindow.isOpen { self.panelWindow.refreshData(self.petState) }
         }
 
         // Now that all UI is ready, process app launch (may fire events)
@@ -244,8 +254,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         }
 
-        if panelWindow != nil && panelWindow.isOpen {
-            panelWindow.refreshData(petState)
+        // Flush throttled panel refresh if typing triggered it
+        if panelRefreshNeeded {
+            panelRefreshNeeded = false
+            if panelWindow.isOpen { panelWindow.refreshData(petState) }
         }
     }
 
@@ -322,6 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         walkController.stop()
         foodSpawner.stop()
         tickTimer?.invalidate()
+        panelRefreshTimer?.invalidate()
         gameSystems.stopPolling()
         petState.save()
     }

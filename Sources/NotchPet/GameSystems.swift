@@ -12,7 +12,7 @@ final class GameSystems {
     private(set) var comboStage: ComboStage = .none
     private var comboStartTime: Date?
     private var lastComboKeypressTime: Date?
-    private static let comboTimeout: TimeInterval = 30
+    private static let comboTimeout: TimeInterval = 60
 
     // App tier tracking
     private(set) var activeAppTier: AppTier = .normal
@@ -105,13 +105,13 @@ final class GameSystems {
         guard let start = comboStartTime else { return }
         let elapsed = Date().timeIntervalSince(start)
         let newStage: ComboStage
-        if elapsed >= 1800 {
+        if elapsed >= 600 {        // 10 min
             newStage = .flow
-        } else if elapsed >= 900 {
+        } else if elapsed >= 300 {  // 5 min
             newStage = .deep
-        } else if elapsed >= 300 {
+        } else if elapsed >= 120 {  // 2 min
             newStage = .focused
-        } else if elapsed >= 60 {
+        } else if elapsed >= 30 {   // 30 sec
             newStage = .warm
         } else {
             newStage = .none
@@ -146,8 +146,9 @@ final class GameSystems {
         }
         lastComboKeypressTime = now
 
-        // Every 10th keypress = XP to lead, every 20th = XP to rest of party
-        if state.totalKeysTyped % 10 == 0 {
+        // Every 25th keypress = XP to lead, every 75th = XP to rest of party
+        // Lead levels ~3x faster than party members
+        if state.totalKeysTyped % 25 == 0 {
             let appMult = activeAppTier.multiplier
             let comboMult = comboStage.multiplier
             let baseGain = max(Int(1.0 * state.streakMultiplier * state.fatigueMultiplier * appMult * comboMult), 0)
@@ -158,7 +159,7 @@ final class GameSystems {
                         let leveledUp = instance.addXP(baseGain)
                         state.pokemonInstances[pokemonId] = instance
                         if leveledUp { onEvent?(.levelUp(instance.level)) }
-                    } else if state.totalKeysTyped % 20 == 0 {
+                    } else if state.totalKeysTyped % 75 == 0 {
                         let leveledUp = instance.addXP(baseGain)
                         state.pokemonInstances[pokemonId] = instance
                         if leveledUp { onEvent?(.levelUp(instance.level)) }
