@@ -13,8 +13,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tickTimer: Timer?
     private var panelRefreshNeeded: Bool = false
     private var panelRefreshTimer: Timer?
+    private var onboardingWindow: OnboardingWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Check accessibility before doing anything else
+        if !accessibilityIsWorking() {
+            showOnboarding()
+            return
+        }
+
+        finishLaunching()
+    }
+
+    private func accessibilityIsWorking() -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        // AXIsProcessTrusted can lie after binary replacement — verify with a real tap
+        let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: mask,
+            callback: { _, _, event, _ in Unmanaged.passUnretained(event) },
+            userInfo: nil
+        ) else {
+            return false
+        }
+        CGEvent.tapEnable(tap: tap, enable: false)
+        return true
+    }
+
+    private func showOnboarding() {
+        let window = OnboardingWindow()
+        window.onAccessibilityGranted = { [weak self] in
+            self?.onboardingWindow = nil
+            self?.finishLaunching()
+        }
+        window.makeKeyAndOrderFront(nil)
+        window.startPolling()
+        onboardingWindow = window
+
+        // Also trigger the system prompt
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+        AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func finishLaunching() {
         // Load persistent state
         petState = PetState.load()
 

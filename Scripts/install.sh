@@ -25,12 +25,12 @@ fi
 
 cp -r "$APP_BUNDLE" "$INSTALL_DIR/$APP_NAME.app"
 
+# Remove quarantine flag so Gatekeeper doesn't block it
+xattr -cr "$INSTALL_DIR/$APP_NAME.app" 2>/dev/null || true
+
 echo "Installed to $INSTALL_DIR/$APP_NAME.app"
 echo ""
 echo "Launching $APP_NAME..."
 open "$INSTALL_DIR/$APP_NAME.app"
 echo ""
-echo "IMPORTANT: Grant accessibility permission when prompted, or go to:"
-echo "  System Settings → Privacy & Security → Accessibility → enable NotchPet"
-echo ""
-echo "If typing isn't tracked, toggle NotchPet OFF then ON in Accessibility settings."
+echo "NotchPet will guide you through granting Accessibility permission on first launch."

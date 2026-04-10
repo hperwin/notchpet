@@ -15,10 +15,7 @@ If someone asks you to install/set up NotchPet, run these two commands:
 ./Scripts/install.sh  # installs to /Applications and launches
 ```
 
-That's it. The user will need to grant **Accessibility permission** when prompted:
-- System Settings → Privacy & Security → Accessibility → enable NotchPet
-
-If NotchPet doesn't appear in the Accessibility list, click **+** and select `/Applications/NotchPet.app`.
+That's it. On first launch, NotchPet shows an onboarding window that guides the user through granting Accessibility permission. It polls automatically and starts working as soon as permission is granted — no restart needed.
 
 ### If Xcode Command Line Tools aren't installed
 
