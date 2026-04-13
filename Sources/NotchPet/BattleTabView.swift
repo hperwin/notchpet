@@ -200,12 +200,12 @@ final class BattleTabView: DSTabView {
         addSubview(oppName)
 
         // Opponent HP bar
-        let oppHPFraction = Double(st.opponentPokemon.currentHP) / Double(max(st.opponentPokemon.stats.maxHP, 1))
+        let oppHPFraction = Double(st.opponentPokemon.currentHP) / Double(max(st.opponentPokemon.maxHP, 1))
         let oppHPBarX = pad + 12.0
         let oppHPBarY = oppY + 32.0
         addHPBar(to: self, x: oppHPBarX, y: oppHPBarY, width: hpBarW, height: hpBarH, fraction: oppHPFraction)
 
-        let oppHPText = DS.label("\(st.opponentPokemon.currentHP)/\(st.opponentPokemon.stats.maxHP)", size: 9, bold: false, color: DS.textSecondary)
+        let oppHPText = DS.label("\(st.opponentPokemon.currentHP)/\(st.opponentPokemon.maxHP)", size: 9, bold: false, color: DS.textSecondary)
         oppHPText.frame = NSRect(x: oppHPBarX, y: oppHPBarY + 6, width: hpBarW, height: 12)
         addSubview(oppHPText)
 
@@ -235,12 +235,12 @@ final class BattleTabView: DSTabView {
         addSubview(playerName)
 
         // Player HP bar
-        let playerHPFraction = Double(st.playerPokemon.currentHP) / Double(max(st.playerPokemon.stats.maxHP, 1))
+        let playerHPFraction = Double(st.playerPokemon.currentHP) / Double(max(st.playerPokemon.maxHP, 1))
         let playerHPBarX = pad + 16 + spriteSize + 12
         let playerHPBarY = playerY + 32.0
         addHPBar(to: self, x: playerHPBarX, y: playerHPBarY, width: hpBarW, height: hpBarH, fraction: playerHPFraction)
 
-        let playerHPText = DS.label("\(st.playerPokemon.currentHP)/\(st.playerPokemon.stats.maxHP)", size: 9, bold: false, color: DS.textSecondary)
+        let playerHPText = DS.label("\(st.playerPokemon.currentHP)/\(st.playerPokemon.maxHP)", size: 9, bold: false, color: DS.textSecondary)
         playerHPText.frame = NSRect(x: playerHPBarX, y: playerHPBarY + 6, width: hpBarW, height: 12)
         addSubview(playerHPText)
 
