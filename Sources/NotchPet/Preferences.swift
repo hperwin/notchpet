@@ -12,6 +12,7 @@ final class Preferences {
         static let animationSpeed = "notchpet.animationSpeed"
         static let autoLaunch = "notchpet.autoLaunch"
         static let hasLaunchedBefore = "notchpet.hasLaunchedBefore"
+        static let berriesEnabled = "notchpet.berriesEnabled"
     }
 
     var savedWindowX: CGFloat? {
@@ -55,6 +56,15 @@ final class Preferences {
     var hasLaunchedBefore: Bool {
         get { defaults.bool(forKey: Keys.hasLaunchedBefore) }
         set { defaults.set(newValue, forKey: Keys.hasLaunchedBefore) }
+    }
+
+    var berriesEnabled: Bool {
+        get {
+            // Default to true if never set
+            if defaults.object(forKey: Keys.berriesEnabled) == nil { return true }
+            return defaults.bool(forKey: Keys.berriesEnabled)
+        }
+        set { defaults.set(newValue, forKey: Keys.berriesEnabled) }
     }
 
     private init() {}

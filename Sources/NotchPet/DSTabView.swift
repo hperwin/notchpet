@@ -10,6 +10,7 @@ enum TabAction {
     case removeFromParty(id: String)
     case reorderParty(newOrder: [String])
     case cycleTier(bundleID: String)
+    case toggleBerries
 }
 
 // MARK: - DS Tab Protocol

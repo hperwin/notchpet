@@ -86,6 +86,26 @@ final class PartyTabView: DSTabView {
                 addHitRegion(HitRegion(id: "empty_\(i)", rect: rect, action: .switchToTab(1)))
             }
         }
+
+        // Berries toggle at bottom
+        let toggleY = slotRects.last.map { $0.maxY + 12 } ?? (Self.contentH - 30)
+        let toggleW: CGFloat = 120
+        let toggleX = (Self.panelW - toggleW) / 2
+
+        let isOn = Preferences.shared.berriesEnabled
+        let toggleBg = NSView(frame: NSRect(x: toggleX, y: toggleY, width: toggleW, height: 26))
+        toggleBg.wantsLayer = true
+        toggleBg.layer?.cornerRadius = 13
+        toggleBg.layer?.backgroundColor = (isOn ? NSColor(red: 0.3, green: 0.8, blue: 0.3, alpha: 1) : NSColor(white: 0.3, alpha: 1)).cgColor
+        addSubview(toggleBg)
+
+        let toggleLabel = DS.label(isOn ? "Berries: ON" : "Berries: OFF", size: 11, bold: true)
+        toggleLabel.translatesAutoresizingMaskIntoConstraints = true
+        toggleLabel.alignment = .center
+        toggleLabel.frame = NSRect(x: 0, y: 3, width: toggleW, height: 20)
+        toggleBg.addSubview(toggleLabel)
+
+        addHitRegion(HitRegion(id: "berries_toggle", rect: toggleBg.frame, action: .toggleBerries))
     }
 
     // MARK: - Mouse Events (Drag & Drop Reordering)
@@ -104,6 +124,14 @@ final class PartyTabView: DSTabView {
             }
         }
         dragSlotIndex = nil
+
+        // Check hit regions (e.g. berries toggle, empty slots)
+        for region in hitRegions where region.enabled {
+            if region.rect.contains(loc) {
+                onAction?(region.action)
+                return
+            }
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {

@@ -94,6 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.updatePartyStrip()
             self.loadLeadPokemon()
         }
+        panelWindow.onBerriesToggled = { [weak self] enabled in
+            guard let self = self else { return }
+            if enabled { self.foodSpawner.start() }
+            else { self.foodSpawner.stop() }
+        }
         panelWindow.refreshData(petState)
 
         // Interaction handler
@@ -160,7 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         foodSpawner.onPartyPokemonBounce = { [weak self] pokemonId in
             self?.partyStrip.playFeedBounce(for: pokemonId)
         }
-        foodSpawner.start()
+        if Preferences.shared.berriesEnabled {
+            foodSpawner.start()
+        }
 
         // Keyboard monitor
         keyboardMonitor = KeyboardMonitor()

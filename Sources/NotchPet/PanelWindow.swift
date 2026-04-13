@@ -8,6 +8,7 @@ final class PanelWindow: NSWindow {
     // Public API
     var isOpen: Bool = false
     var onPartyChanged: (([String]) -> Void)?
+    var onBerriesToggled: ((Bool) -> Void)?
 
     // Layout constants
     private let panelWidth: CGFloat = 580
@@ -268,6 +269,10 @@ final class PanelWindow: NSWindow {
                 state.save()
                 refreshData(state)
             }
+        case .toggleBerries:
+            Preferences.shared.berriesEnabled.toggle()
+            onBerriesToggled?(Preferences.shared.berriesEnabled)
+            if let state = lastState { refreshData(state) }
         }
     }
 
