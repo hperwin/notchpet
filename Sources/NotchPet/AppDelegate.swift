@@ -99,6 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if enabled { self.foodSpawner.start() }
             else { self.foodSpawner.stop() }
         }
+        panelWindow.onBattleWon = { [weak self] in
+            self?.handleBattleVictory()
+        }
         panelWindow.refreshData(petState)
 
         // Interaction handler
@@ -250,6 +253,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             partyStrip.showLevelUp(pokemonName: name, newLevel: instance.level)
         }
         if panelWindow.isOpen { panelWindow.refreshData(petState) }
+    }
+
+    // MARK: - Battle Victory
+
+    private func handleBattleVictory() {
+        let xpReward = Int.random(in: 50...150)
+        var anyLevelUp = false
+
+        for pokemonId in petState.party {
+            guard var instance = petState.pokemonInstances[pokemonId] else { continue }
+            let leveledUp = instance.addXP(xpReward)
+            petState.pokemonInstances[pokemonId] = instance
+            if leveledUp {
+                anyLevelUp = true
+                let name = PetCollection.entry(for: pokemonId)?.displayName ?? pokemonId
+                partyStrip.showLevelUp(pokemonName: name, newLevel: instance.level)
+            }
+        }
+
+        petState.save()
+        updatePartyStrip()
+
+        // Update battle tab with XP info
+        if let battleTab = panelWindow.battleTabIfPresent {
+            battleTab.setXPAwarded(xpReward)
+        }
+
+        if panelWindow.isOpen { panelWindow.refreshData(petState) }
+        NSLog("NotchPet: Battle won! Awarded \(xpReward) XP to party. Level ups: \(anyLevelUp)")
     }
 
     // MARK: - Panel
