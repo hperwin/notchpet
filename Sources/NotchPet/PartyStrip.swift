@@ -256,6 +256,10 @@ final class PartyStrip {
         }
         pokemonWindows.removeAll()
         isVisible = false
+        // Dismiss any active popups
+        levelUpTimer?.invalidate()
+        levelUpWindow?.orderOut(nil); levelUpWindow = nil
+        comboBadgeWindow?.orderOut(nil); comboBadgeWindow = nil
     }
 
     func updateParty(_ party: [String], level: Int) {
