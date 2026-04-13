@@ -152,6 +152,102 @@ final class MatchmakingManager {
             .execute()
     }
 
+    // MARK: - Friend Battles
+
+    /// Create a battle room and wait for a friend to join using your friend code.
+    func createFriendBattle(player: PlayerRecord) async throws -> String {
+        let battles: [BattleRecord] = try await supabase.client
+            .from("battles")
+            .insert(FriendBattleInsert(
+                player1Id: player.id,
+                player2Id: nil,
+                status: "waiting_friend"
+            ))
+            .select()
+            .execute()
+            .value
+
+        guard let battle = battles.first else {
+            throw MatchmakingError.playerCreationFailed
+        }
+        return battle.id
+    }
+
+    /// Join a friend's battle using their friend code.
+    func joinFriendBattle(player: PlayerRecord, friendCode: String) async throws -> MatchFound {
+        let waiting: [BattleRecord] = try await supabase.client
+            .from("battles")
+            .select()
+            .eq("status", value: "waiting_friend")
+            .execute()
+            .value
+
+        // Find the battle whose player1 ID matches the friend code
+        guard let battle = waiting.first(where: { record in
+            guard let p1Id = record.player1Id else { return false }
+            let code = SupabaseManager.friendCode(from: p1Id)
+            return code == friendCode.uppercased()
+        }) else {
+            throw MatchmakingError.noOpponent
+        }
+
+        // Update the battle to add player2 and set active
+        try await supabase.client
+            .from("battles")
+            .update(BattleStatusUpdate(player2Id: player.id, status: "active"))
+            .eq("id", value: battle.id)
+            .execute()
+
+        return MatchFound(
+            battleId: battle.id,
+            opponentId: battle.player1Id ?? "",
+            opponentParty: "",
+            isPlayer1: false
+        )
+    }
+
+    /// Poll for a friend to join your battle room.
+    func waitForFriend(battleId: String) async throws -> MatchFound {
+        for _ in 0..<30 { // 60 seconds total (2s intervals)
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+
+            let battles: [BattleRecord] = try await supabase.client
+                .from("battles")
+                .select()
+                .eq("id", value: battleId)
+                .eq("status", value: "active")
+                .execute()
+                .value
+
+            if let battle = battles.first, battle.player2Id != nil {
+                return MatchFound(
+                    battleId: battle.id,
+                    opponentId: battle.player2Id ?? "",
+                    opponentParty: "",
+                    isPlayer1: true
+                )
+            }
+        }
+
+        // Cleanup the stale waiting battle
+        try await supabase.client
+            .from("battles")
+            .delete()
+            .eq("id", value: battleId)
+            .execute()
+
+        throw MatchmakingError.timeout
+    }
+
+    /// Cancel a pending friend battle.
+    func cancelFriendBattle(battleId: String) async throws {
+        try await supabase.client
+            .from("battles")
+            .delete()
+            .eq("id", value: battleId)
+            .execute()
+    }
+
     /// Update ELO after battle
     func updateELO(playerId: String, opponentELO: Int, won: Bool) async throws {
         let players: [PlayerRecord] = try await supabase.client
@@ -193,4 +289,5 @@ struct MatchFound {
 enum MatchmakingError: Error {
     case timeout
     case playerCreationFailed
+    case noOpponent
 }
