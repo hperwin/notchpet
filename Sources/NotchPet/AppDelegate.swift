@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelRefreshNeeded: Bool = false
     private var panelRefreshTimer: Timer?
     private var onboardingWindow: OnboardingWindow?
+    private var statusItem: NSStatusItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility before doing anything else
@@ -131,7 +132,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.panelWindow.showDetailForPokemon(id)
         }
         updatePartyStrip()
-        partyStrip.show()
+        if !Preferences.shared.isAppHidden {
+            partyStrip.show()
+        }
 
         // Food spawner — berries appear to the right of the notch
         foodSpawner = FoodSpawner(petWindowFrame: { [weak self] in
@@ -165,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         foodSpawner.onPartyPokemonBounce = { [weak self] pokemonId in
             self?.partyStrip.playFeedBounce(for: pokemonId)
         }
-        if Preferences.shared.berriesEnabled {
+        if Preferences.shared.berriesEnabled && !Preferences.shared.isAppHidden {
             foodSpawner.start()
         }
 
@@ -210,6 +213,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Don't show the pet window — party strip IS the party, no separate lead pet
         // petWindow.orderFront(nil)
+
+        // Status bar icon for toggling visibility
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem?.button {
+            button.title = "NP"
+            button.font = NSFont.boldSystemFont(ofSize: 10)
+            button.action = #selector(statusItemClicked)
+            button.target = self
+        }
+
+        // Notification observers for hide/show from context menu
+        NotificationCenter.default.addObserver(forName: .init("notchpet.hideApp"), object: nil, queue: .main) { [weak self] _ in
+            self?.hideApp()
+        }
+        NotificationCenter.default.addObserver(forName: .init("notchpet.showApp"), object: nil, queue: .main) { [weak self] _ in
+            self?.showApp()
+        }
     }
 
     // MARK: - Lead Pokemon
@@ -378,6 +398,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func resetPosition() {
         petWindow.petView.setPetLocalX(petWindow.petView.homeX)
+    }
+
+    // MARK: - App Visibility
+
+    func hideApp() {
+        Preferences.shared.isAppHidden = true
+        partyStrip.hide()
+        petWindow.orderOut(nil)
+        foodSpawner.stop()
+        if panelWindow.isOpen {
+            panelWindow.isOpen = false
+            panelWindow.orderOut(nil)
+        }
+    }
+
+    func showApp() {
+        Preferences.shared.isAppHidden = false
+        partyStrip.show()
+        updatePartyStrip()
+        if Preferences.shared.berriesEnabled {
+            foodSpawner.start()
+        }
+    }
+
+    @objc private func statusItemClicked() {
+        if Preferences.shared.isAppHidden {
+            showApp()
+        } else {
+            hideApp()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

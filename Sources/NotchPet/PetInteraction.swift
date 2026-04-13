@@ -95,6 +95,16 @@ final class PetInteraction {
 
         menu.addItem(.separator())
 
+        let hideItem = NSMenuItem(
+            title: "Hide Pets",
+            action: #selector(hidePets(_:)),
+            keyEquivalent: "h"
+        )
+        hideItem.target = self
+        menu.addItem(hideItem)
+
+        menu.addItem(.separator())
+
         // Quit
         let quitItem = NSMenuItem(title: "Quit NotchPet", action: #selector(quitApp(_:)), keyEquivalent: "q")
         quitItem.target = self
@@ -116,6 +126,10 @@ final class PetInteraction {
 
     @objc private func resetPosition(_ sender: NSMenuItem) {
         resetPositionAction?()
+    }
+
+    @objc private func hidePets(_ sender: NSMenuItem) {
+        NotificationCenter.default.post(name: .init("notchpet.hideApp"), object: nil)
     }
 
     @objc private func quitApp(_ sender: NSMenuItem) {

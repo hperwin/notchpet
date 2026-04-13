@@ -13,6 +13,7 @@ final class Preferences {
         static let autoLaunch = "notchpet.autoLaunch"
         static let hasLaunchedBefore = "notchpet.hasLaunchedBefore"
         static let berriesEnabled = "notchpet.berriesEnabled"
+        static let appHidden = "notchpet.appHidden"
     }
 
     var savedWindowX: CGFloat? {
@@ -56,6 +57,11 @@ final class Preferences {
     var hasLaunchedBefore: Bool {
         get { defaults.bool(forKey: Keys.hasLaunchedBefore) }
         set { defaults.set(newValue, forKey: Keys.hasLaunchedBefore) }
+    }
+
+    var isAppHidden: Bool {
+        get { defaults.bool(forKey: Keys.appHidden) }
+        set { defaults.set(newValue, forKey: Keys.appHidden) }
     }
 
     var berriesEnabled: Bool {
