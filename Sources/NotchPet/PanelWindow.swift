@@ -34,7 +34,10 @@ final class PanelWindow: NSWindow {
     private var globalMonitor: Any?
 
     // Tab titles
-    private static let tabTitles = ["Party", "Pokemon", "Stats", "Medals", "Battle"]
+    private static let tabTitles = ["Party", "Battle", "Profile"]
+
+    // Collection overlay (not a tab — shown via "See All")
+    private var collectionOverlay: CollectionTabView?
 
     // Battle system
     private var battleEngine: BattleEngine?
@@ -194,13 +197,10 @@ final class PanelWindow: NSWindow {
 
     private func setupTabs() {
         let party = PartyTabView()
-        let collection = CollectionTabView()
-        let stats = StatsTabView()
-        let achievements = AchievementsTabView()
         let battle = BattleTabView()
-        let appSettings = AppSettingsTabView()
+        let profile = ProfileTabView()
 
-        tabs = [party, collection, stats, achievements, battle, appSettings]
+        tabs = [party, battle, profile]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -286,6 +286,9 @@ final class PanelWindow: NSWindow {
             if let battleTab = tabs.compactMap({ $0 as? BattleTabView }).first {
                 battleTab.executePlayerMove(index: index)
             }
+
+        case .showCollection:
+            showCollection()
         }
     }
 
@@ -365,7 +368,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Stats", "Medals", "Battle", "Apps"]
+        let labels = ["Party", "Battle", "Profile"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
@@ -420,6 +423,26 @@ final class PanelWindow: NSWindow {
             let battleIndex = tabs.firstIndex(where: { $0 is BattleTabView }) ?? 0
             switchToTab(battleIndex)
         }
+    }
+
+    // MARK: - Collection Overlay
+
+    private func showCollection() {
+        let collection = CollectionTabView()
+        collection.onAction = { [weak self] action in
+            self?.handleTabAction(action)
+        }
+        if let state = lastState {
+            collection.update(state: state)
+        }
+        collectionOverlay = collection
+
+        tabContentArea.subviews.forEach { $0.removeFromSuperview() }
+        let collView = collection.view
+        collView.translatesAutoresizingMaskIntoConstraints = true
+        collView.frame = tabContentArea.bounds
+        collView.autoresizingMask = [.width, .height]
+        tabContentArea.addSubview(collView)
     }
 
     // MARK: - Detail Navigation

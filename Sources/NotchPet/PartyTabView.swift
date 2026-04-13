@@ -83,7 +83,7 @@ final class PartyTabView: DSTabView {
                 addHitRegion(HitRegion(id: "party_\(i)", rect: rect, action: .showDetail(pokemonId: pokemonId)))
             } else {
                 addEmptyCard(rect: rect)
-                addHitRegion(HitRegion(id: "empty_\(i)", rect: rect, action: .switchToTab(1)))
+                addHitRegion(HitRegion(id: "empty_\(i)", rect: rect, action: .showCollection))
             }
         }
 
@@ -106,6 +106,16 @@ final class PartyTabView: DSTabView {
         toggleBg.addSubview(toggleLabel)
 
         addHitRegion(HitRegion(id: "berries_toggle", rect: toggleBg.frame, action: .toggleBerries))
+
+        // "See All Pokemon" link
+        let seeAllY = toggleY + 32
+        let seeAllW: CGFloat = 140
+        let seeAllLabel = DS.label("See All Pokemon \u{2192}", size: 11, bold: false, color: DS.gold)
+        seeAllLabel.translatesAutoresizingMaskIntoConstraints = true
+        seeAllLabel.frame = NSRect(x: (Self.panelW - seeAllW) / 2, y: seeAllY, width: seeAllW, height: 16)
+        seeAllLabel.alignment = .center
+        addSubview(seeAllLabel)
+        addHitRegion(HitRegion(id: "see_all", rect: seeAllLabel.frame, action: .showCollection))
     }
 
     // MARK: - Mouse Events (Drag & Drop Reordering)

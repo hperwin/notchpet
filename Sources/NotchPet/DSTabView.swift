@@ -13,6 +13,7 @@ enum TabAction {
     case toggleBerries
     case startBattle
     case battleMove(index: Int)
+    case showCollection
 }
 
 // MARK: - DS Tab Protocol
