@@ -27,6 +27,13 @@ final class BattleTabView: DSTabView {
     // XP
     private var xpAwarded: Int = 0
 
+    // Friend code text field (persistent reference for reading value)
+    private var friendCodeField: NSTextField?
+
+    // Active search task (for cancellation)
+    private var searchTask: Task<Void, Never>?
+    private var pendingFriendBattleId: String?
+
     // MARK: - Layout Constants
 
     private static let panelW: CGFloat = 580
@@ -281,75 +288,140 @@ final class BattleTabView: DSTabView {
 
     private func buildPreBattle() {
         let w = bounds.width
-        let h = bounds.height
+
+        // --- Friend Code Display ---
+        let playerId = Preferences.shared.playerId ?? ""
+        let myCode = SupabaseManager.friendCode(from: playerId)
+
+        let codeY: CGFloat = 14
+        let codeBg = NSView(frame: NSRect(x: (w - 200) / 2, y: codeY, width: 200, height: 28))
+        codeBg.wantsLayer = true
+        codeBg.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.8).cgColor
+        codeBg.layer?.cornerRadius = 6
+        addSubview(codeBg)
+
+        let codeLabel = DS.label("Your Code:  \(myCode)", size: 13, bold: true, color: DS.gold)
+        codeLabel.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        codeLabel.frame = codeBg.bounds
+        codeLabel.alignment = .center
+        codeBg.addSubview(codeLabel)
+
+        // --- VS area with sprites ---
+        let vsY: CGFloat = codeY + 38
         let centerX = w / 2
 
-        // "VS" label - large centered
-        let vsLabel = DS.label("VS", size: 36, bold: true, color: NSColor.white.withAlphaComponent(0.9))
-        vsLabel.frame = NSRect(x: 0, y: h * 0.2, width: w, height: 44)
+        if let state = currentState, let leadId = state.party.first {
+            let playerSprite = DSTabView.dsSprite(for: leadId, size: 48)
+            playerSprite.translatesAutoresizingMaskIntoConstraints = true
+            playerSprite.frame = NSRect(x: centerX - 80 - 48, y: vsY, width: 48, height: 48)
+            addSubview(playerSprite)
+        }
+
+        let vsLabel = DS.label("VS", size: 28, bold: true, color: NSColor.white.withAlphaComponent(0.9))
+        vsLabel.frame = NSRect(x: 0, y: vsY + 6, width: w, height: 36)
         vsLabel.alignment = .center
         addSubview(vsLabel)
 
-        // Player's lead sprite on the left
-        if let state = currentState, let leadId = state.party.first {
-            let playerSprite = DSTabView.dsSprite(for: leadId, size: 64)
-            playerSprite.translatesAutoresizingMaskIntoConstraints = true
-            playerSprite.frame = NSRect(x: centerX - 100 - 64, y: h * 0.2 - 8, width: 64, height: 64)
-            addSubview(playerSprite)
-
-            let playerName = DS.label(PetCollection.entry(for: leadId)?.displayName ?? leadId.capitalized, size: 10, bold: true)
-            playerName.frame = NSRect(x: centerX - 100 - 64, y: h * 0.2 + 56, width: 64, height: 14)
-            playerName.alignment = .center
-            addSubview(playerName)
-        }
-
-        // "?" opponent on the right
-        let qLabel = DS.label("?", size: 48, bold: true, color: DS.textSecondary)
-        qLabel.frame = NSRect(x: centerX + 100, y: h * 0.2 - 4, width: 64, height: 60)
+        let qLabel = DS.label("?", size: 36, bold: true, color: DS.textSecondary)
+        qLabel.frame = NSRect(x: centerX + 80, y: vsY, width: 48, height: 48)
         qLabel.alignment = .center
         addSubview(qLabel)
 
-        // "Challenge a wild trainer?" text
-        let challengeLabel = DS.label("Challenge a wild trainer?", size: 12, bold: false, color: DS.textSecondary)
-        challengeLabel.frame = NSRect(x: 0, y: h * 0.55, width: w, height: 18)
-        challengeLabel.alignment = .center
-        addSubview(challengeLabel)
-
-        // "BATTLE!" button
-        let btnW: CGFloat = 180
-        let btnH: CGFloat = 48
+        // --- Battle Mode Buttons ---
+        let btnW: CGFloat = 200
+        let btnH: CGFloat = 36
         let btnX = (w - btnW) / 2
-        let btnY = h * 0.55 + 30
-        let btn = makeBattleButton(label: "BATTLE!", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
-        addSubview(btn)
+        var btnY: CGFloat = vsY + 64
+
+        // Battle AI button
+        let aiBtn = makeBattleButton(label: "Battle AI", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
+        addSubview(aiBtn)
         addHitRegion(HitRegion(
             id: "startBattle",
             rect: NSRect(x: btnX, y: btnY, width: btnW, height: btnH),
             action: .startBattle
         ))
+        btnY += btnH + 8
 
-        // Party sprites row
+        // Find Match button
+        let matchBtn = makeBattleButton(label: "Find Match", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
+        addSubview(matchBtn)
+        addHitRegion(HitRegion(
+            id: "findMatch",
+            rect: NSRect(x: btnX, y: btnY, width: btnW, height: btnH),
+            action: .findOnlineMatch
+        ))
+        btnY += btnH + 16
+
+        // --- Challenge Friend Section ---
+        let sectionLabel = DS.label("Challenge a Friend", size: 11, bold: true, color: DS.textSecondary)
+        sectionLabel.frame = NSRect(x: 0, y: btnY, width: w, height: 16)
+        sectionLabel.alignment = .center
+        addSubview(sectionLabel)
+        btnY += 20
+
+        // Invite button (creates a waiting room)
+        let inviteBtnW: CGFloat = 200
+        let inviteBtn = makeSecondaryButton(label: "Invite (Share Your Code)", frame: NSRect(x: (w - inviteBtnW) / 2, y: btnY, width: inviteBtnW, height: 32))
+        addSubview(inviteBtn)
+        addHitRegion(HitRegion(
+            id: "createFriend",
+            rect: NSRect(x: (w - inviteBtnW) / 2, y: btnY, width: inviteBtnW, height: 32),
+            action: .createFriendBattle
+        ))
+        btnY += 40
+
+        // Friend code entry row: [text field] [Join]
+        let fieldW: CGFloat = 100
+        let joinBtnW: CGFloat = 60
+        let rowW = fieldW + 8 + joinBtnW
+        let rowX = (w - rowW) / 2
+
+        let codeField = NSTextField(frame: NSRect(x: rowX, y: btnY, width: fieldW, height: 26))
+        codeField.placeholderString = "Code"
+        codeField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        codeField.alignment = .center
+        codeField.bezelStyle = .roundedBezel
+        codeField.maximumNumberOfLines = 1
+        codeField.cell?.isScrollable = true
+        addSubview(codeField)
+        friendCodeField = codeField
+
+        let joinBtn = makeSecondaryButton(label: "Join", frame: NSRect(x: rowX + fieldW + 8, y: btnY, width: joinBtnW, height: 26))
+        addSubview(joinBtn)
+        addHitRegion(HitRegion(
+            id: "joinFriend",
+            rect: NSRect(x: rowX + fieldW + 8, y: btnY, width: joinBtnW, height: 26),
+            action: .joinFriendBattle(code: "") // code read from field at action time
+        ))
+        btnY += 36
+
+        // --- Party sprites row ---
         if let state = currentState {
-            let spriteSize: CGFloat = 32
-            let spacing: CGFloat = 6
+            let spriteSize: CGFloat = 28
+            let spacing: CGFloat = 5
             let partyCount = CGFloat(state.party.count)
             let totalW = partyCount * spriteSize + (partyCount - 1) * spacing
             var sx = (w - totalW) / 2
-            let sy = btnY + btnH + 16
 
             let teamLabel = DS.label("Your team", size: 9, bold: false, color: DS.textSecondary)
-            teamLabel.frame = NSRect(x: 0, y: sy - 14, width: w, height: 12)
+            teamLabel.frame = NSRect(x: 0, y: btnY, width: w, height: 12)
             teamLabel.alignment = .center
             addSubview(teamLabel)
 
             for pokemonId in state.party {
                 let sprite = DSTabView.dsSprite(for: pokemonId, size: spriteSize)
                 sprite.translatesAutoresizingMaskIntoConstraints = true
-                sprite.frame = NSRect(x: sx, y: sy, width: spriteSize, height: spriteSize)
+                sprite.frame = NSRect(x: sx, y: btnY + 14, width: spriteSize, height: spriteSize)
                 addSubview(sprite)
                 sx += spriteSize + spacing
             }
         }
+    }
+
+    /// Read the current text from the friend code input field.
+    func readFriendCode() -> String {
+        return friendCodeField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     }
 
     // MARK: - Arena (In-Battle)
@@ -742,6 +814,158 @@ final class BattleTabView: DSTabView {
             fill.layer?.backgroundColor = color.cgColor
             fill.layer?.cornerRadius = height / 2
             track.addSubview(fill)
+        }
+    }
+
+    // MARK: - Secondary Button Builder
+
+    private func makeSecondaryButton(label: String, frame: NSRect) -> NSView {
+        let v = NSView(frame: frame)
+        v.wantsLayer = true
+        v.layer?.backgroundColor = BattleTabView.moveBtnBg.cgColor
+        v.layer?.cornerRadius = 8
+        v.layer?.borderColor = BattleTabView.moveBtnBorder.cgColor
+        v.layer?.borderWidth = 1
+
+        let lbl = DS.label(label, size: 12, bold: true)
+        lbl.frame = v.bounds
+        lbl.alignment = .center
+        v.addSubview(lbl)
+
+        return v
+    }
+
+    // MARK: - Searching / Waiting State
+
+    func showSearching(message: String) {
+        subviews.forEach { $0.removeFromSuperview() }
+        clearHitRegions()
+        friendCodeField = nil
+
+        let w = bounds.width
+        let h = bounds.height
+
+        // Background gradient (re-add since we cleared subviews)
+        let grad = CAGradientLayer()
+        grad.name = "battleGrad"
+        grad.frame = bounds
+        grad.colors = [BattleTabView.bgTop.cgColor, BattleTabView.bgBot.cgColor]
+        grad.startPoint = CGPoint(x: 0.5, y: 0)
+        grad.endPoint = CGPoint(x: 0.5, y: 1)
+        layer?.sublayers?.removeAll(where: { $0.name == "battleGrad" })
+        layer?.insertSublayer(grad, at: 0)
+
+        // Searching message
+        let label = DS.label(message, size: 14, bold: true)
+        label.alignment = .center
+        label.frame = NSRect(x: 20, y: h * 0.35, width: w - 40, height: 30)
+        addSubview(label)
+
+        // Animated dots
+        let dots = DS.label("...", size: 18, bold: true, color: DS.gold)
+        dots.alignment = .center
+        dots.frame = NSRect(x: 20, y: h * 0.35 + 30, width: w - 40, height: 24)
+        addSubview(dots)
+
+        // Cancel button
+        let cancelW: CGFloat = 120
+        let cancelH: CGFloat = 32
+        let cancelX = (w - cancelW) / 2
+        let cancelY = h * 0.6
+        let cancelBtn = makeSecondaryButton(label: "Cancel", frame: NSRect(x: cancelX, y: cancelY, width: cancelW, height: cancelH))
+        addSubview(cancelBtn)
+        addHitRegion(HitRegion(
+            id: "cancelSearch",
+            rect: NSRect(x: cancelX, y: cancelY, width: cancelW, height: cancelH),
+            action: .cancelSearch
+        ))
+    }
+
+    func showWaitingForFriend(code: String) {
+        subviews.forEach { $0.removeFromSuperview() }
+        clearHitRegions()
+        friendCodeField = nil
+
+        let w = bounds.width
+        let h = bounds.height
+
+        let grad = CAGradientLayer()
+        grad.name = "battleGrad"
+        grad.frame = bounds
+        grad.colors = [BattleTabView.bgTop.cgColor, BattleTabView.bgBot.cgColor]
+        grad.startPoint = CGPoint(x: 0.5, y: 0)
+        grad.endPoint = CGPoint(x: 0.5, y: 1)
+        layer?.sublayers?.removeAll(where: { $0.name == "battleGrad" })
+        layer?.insertSublayer(grad, at: 0)
+
+        let waitLabel = DS.label("Waiting for friend...", size: 14, bold: true)
+        waitLabel.alignment = .center
+        waitLabel.frame = NSRect(x: 20, y: h * 0.3, width: w - 40, height: 24)
+        addSubview(waitLabel)
+
+        let shareLabel = DS.label("Share your code:", size: 11, bold: false, color: DS.textSecondary)
+        shareLabel.alignment = .center
+        shareLabel.frame = NSRect(x: 20, y: h * 0.3 + 30, width: w - 40, height: 18)
+        addSubview(shareLabel)
+
+        // Code display (large, monospaced, gold)
+        let codeBg = NSView(frame: NSRect(x: (w - 160) / 2, y: h * 0.3 + 54, width: 160, height: 36))
+        codeBg.wantsLayer = true
+        codeBg.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.9).cgColor
+        codeBg.layer?.cornerRadius = 8
+        codeBg.layer?.borderColor = DS.gold.cgColor
+        codeBg.layer?.borderWidth = 1.5
+        addSubview(codeBg)
+
+        let codeLabel = DS.label(code, size: 20, bold: true, color: DS.gold)
+        codeLabel.font = NSFont.monospacedSystemFont(ofSize: 20, weight: .bold)
+        codeLabel.frame = codeBg.bounds
+        codeLabel.alignment = .center
+        codeBg.addSubview(codeLabel)
+
+        // Cancel button
+        let cancelW: CGFloat = 120
+        let cancelH: CGFloat = 32
+        let cancelX = (w - cancelW) / 2
+        let cancelY = h * 0.7
+        let cancelBtn = makeSecondaryButton(label: "Cancel", frame: NSRect(x: cancelX, y: cancelY, width: cancelW, height: cancelH))
+        addSubview(cancelBtn)
+        addHitRegion(HitRegion(
+            id: "cancelSearch",
+            rect: NSRect(x: cancelX, y: cancelY, width: cancelW, height: cancelH),
+            action: .cancelSearch
+        ))
+    }
+
+    // MARK: - Error State
+
+    func showError(_ message: String) {
+        subviews.forEach { $0.removeFromSuperview() }
+        clearHitRegions()
+        friendCodeField = nil
+
+        let w = bounds.width
+        let h = bounds.height
+
+        let grad = CAGradientLayer()
+        grad.name = "battleGrad"
+        grad.frame = bounds
+        grad.colors = [BattleTabView.bgTop.cgColor, BattleTabView.bgBot.cgColor]
+        grad.startPoint = CGPoint(x: 0.5, y: 0)
+        grad.endPoint = CGPoint(x: 0.5, y: 1)
+        layer?.sublayers?.removeAll(where: { $0.name == "battleGrad" })
+        layer?.insertSublayer(grad, at: 0)
+
+        let errorLabel = DS.label(message, size: 13, bold: true, color: BattleTabView.hpRed)
+        errorLabel.alignment = .center
+        errorLabel.frame = NSRect(x: 20, y: h * 0.4, width: w - 40, height: 30)
+        addSubview(errorLabel)
+
+        // Return to pre-battle after 2 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self else { return }
+            self.uiState = .preBattle
+            self.rebuildUI()
         }
     }
 }

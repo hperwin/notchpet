@@ -14,6 +14,10 @@ enum TabAction {
     case startBattle
     case battleMove(index: Int)
     case showCollection
+    case findOnlineMatch
+    case createFriendBattle
+    case joinFriendBattle(code: String)
+    case cancelSearch
 }
 
 // MARK: - DS Tab Protocol
