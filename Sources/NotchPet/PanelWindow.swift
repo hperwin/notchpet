@@ -9,6 +9,7 @@ final class PanelWindow: NSWindow {
     var isOpen: Bool = false
     var onPartyChanged: (([String]) -> Void)?
     var onBerriesToggled: ((Bool) -> Void)?
+    var onBattleWon: (() -> Void)?
 
     // Layout constants
     private let panelWidth: CGFloat = 580
@@ -33,7 +34,10 @@ final class PanelWindow: NSWindow {
     private var globalMonitor: Any?
 
     // Tab titles
-    private static let tabTitles = ["Party", "Pokemon", "Stats", "Medals"]
+    private static let tabTitles = ["Party", "Pokemon", "Stats", "Medals", "Battle"]
+
+    // Battle system
+    private var battleEngine: BattleEngine?
 
     // MARK: - Init
 
@@ -193,9 +197,10 @@ final class PanelWindow: NSWindow {
         let collection = CollectionTabView()
         let stats = StatsTabView()
         let achievements = AchievementsTabView()
+        let battle = BattleTabView()
         let appSettings = AppSettingsTabView()
 
-        tabs = [party, collection, stats, achievements, appSettings]
+        tabs = [party, collection, stats, achievements, battle, appSettings]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -273,6 +278,14 @@ final class PanelWindow: NSWindow {
             Preferences.shared.berriesEnabled.toggle()
             onBerriesToggled?(Preferences.shared.berriesEnabled)
             if let state = lastState { refreshData(state) }
+
+        case .startBattle:
+            startBattle()
+
+        case .battleMove(let index):
+            if let battleTab = tabs.compactMap({ $0 as? BattleTabView }).first {
+                battleTab.executePlayerMove(index: index)
+            }
         }
     }
 
@@ -352,7 +365,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Stats", "Medals", "Apps"]
+        let labels = ["Party", "Box", "Stats", "Medals", "Battle", "Apps"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
@@ -371,6 +384,41 @@ final class PanelWindow: NSWindow {
     private func updateTabBarAppearance() {
         for btn in tabButtons {
             btn.setActive(btn.tabIndex == currentTabIndex)
+        }
+    }
+
+    /// Exposes the BattleTabView so the app delegate can set XP awarded.
+    var battleTabIfPresent: BattleTabView? {
+        tabs.compactMap { $0 as? BattleTabView }.first
+    }
+
+    // MARK: - Battle
+
+    private func startBattle() {
+        guard let state = lastState else { return }
+
+        // Build player team from party
+        let playerInstances = state.party.compactMap { state.pokemonInstances[$0] }
+        guard !playerInstances.isEmpty else { return }
+        let playerTeam = playerInstances.map { BattlePokemon(from: $0) }
+
+        // Generate AI team
+        let opponentTeam = BattleAI.generateTeam(playerParty: playerInstances)
+
+        let engine = BattleEngine(playerTeam: playerTeam, opponentTeam: opponentTeam)
+        battleEngine = engine
+
+        engine.onBattleOver = { [weak self] winner in
+            if winner == .player {
+                self?.onBattleWon?()
+            }
+        }
+
+        if let battleTab = tabs.compactMap({ $0 as? BattleTabView }).first {
+            battleTab.startBattle(engine: engine)
+            // Switch to battle tab
+            let battleIndex = tabs.firstIndex(where: { $0 is BattleTabView }) ?? 0
+            switchToTab(battleIndex)
         }
     }
 

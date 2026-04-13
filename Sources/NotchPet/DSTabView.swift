@@ -11,6 +11,8 @@ enum TabAction {
     case reorderParty(newOrder: [String])
     case cycleTier(bundleID: String)
     case toggleBerries
+    case startBattle
+    case battleMove(index: Int)
 }
 
 // MARK: - DS Tab Protocol
