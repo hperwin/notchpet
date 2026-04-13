@@ -200,10 +200,11 @@ final class PanelWindow: NSWindow {
 
     private func setupTabs() {
         let party = PartyTabView()
+        let collection = CollectionTabView()
         let battle = BattleTabView()
         let profile = ProfileTabView()
 
-        tabs = [party, battle, profile]
+        tabs = [party, collection, battle, profile]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -387,7 +388,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Battle", "Profile"]
+        let labels = ["Party", "Box", "Battle", "Profile"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
@@ -736,7 +737,7 @@ private class RetroNavButton: NSView {
         tf.drawsBackground = false
         tf.isBordered = false
         tf.isEditable = false
-        tf.shadow = DS.dsShadow()
+        tf.shadow = nil
         tf.translatesAutoresizingMaskIntoConstraints = false
         self.labelField = tf
 

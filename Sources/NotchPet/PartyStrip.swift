@@ -297,6 +297,7 @@ final class PartyStrip {
     // MARK: - Level Up Popup
 
     func showLevelUp(pokemonName: String, newLevel: Int) {
+        guard !Preferences.shared.isAppHidden else { return }
         guard let screen = NSScreen.main else { return }
 
         levelUpTimer?.invalidate()
@@ -364,6 +365,7 @@ final class PartyStrip {
     // MARK: - Combo Badge
 
     func updateCombo(_ stage: GameSystems.ComboStage) {
+        guard !Preferences.shared.isAppHidden else { return }
         guard stage != currentComboStage else { return }
         let oldStage = currentComboStage
         currentComboStage = stage
