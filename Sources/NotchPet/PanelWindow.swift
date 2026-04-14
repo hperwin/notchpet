@@ -9,7 +9,6 @@ final class PanelWindow: NSWindow {
     var isOpen: Bool = false
     var onPartyChanged: (([String]) -> Void)?
     var onBerriesToggled: ((Bool) -> Void)?
-    var onBattleWon: (() -> Void)?
 
     // Layout constants
     private let panelWidth: CGFloat = 580
@@ -39,8 +38,6 @@ final class PanelWindow: NSWindow {
     // Collection overlay (not a tab — shown via "See All")
     private var collectionOverlay: CollectionTabView?
 
-    // Battle system
-    private var battleEngine: BattleEngine?
 
     // MARK: - Init
 
@@ -198,10 +195,9 @@ final class PanelWindow: NSWindow {
     private func setupTabs() {
         let party = PartyTabView()
         let collection = CollectionTabView()
-        let battle = BattleTabView()
         let profile = ProfileTabView()
 
-        tabs = [party, collection, battle, profile]
+        tabs = [party, collection, profile]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -280,19 +276,8 @@ final class PanelWindow: NSWindow {
             onBerriesToggled?(Preferences.shared.berriesEnabled)
             if let state = lastState { refreshData(state) }
 
-        case .startBattle:
-            startBattle()
-
-        case .battleMove(let index):
-            if let battleTab = tabs.compactMap({ $0 as? BattleTabView }).first {
-                battleTab.executePlayerMove(index: index)
-            }
-
         case .showCollection:
             showCollection()
-
-        case .findOnlineMatch, .createFriendBattle, .joinFriendBattle, .cancelSearch:
-            break // multiplayer disabled for now
         }
     }
 
@@ -372,7 +357,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Battle", "Profile"]
+        let labels = ["Party", "Box", "Profile"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
@@ -395,40 +380,6 @@ final class PanelWindow: NSWindow {
     }
 
     /// Exposes the BattleTabView so the app delegate can set XP awarded.
-    var battleTabIfPresent: BattleTabView? {
-        tabs.compactMap { $0 as? BattleTabView }.first
-    }
-
-    // MARK: - Battle
-
-    private func startBattle() {
-        guard let state = lastState else { return }
-
-        // Build player team from party
-        let playerInstances = state.party.compactMap { state.pokemonInstances[$0] }
-        guard !playerInstances.isEmpty else { return }
-        let playerTeam = playerInstances.map { BattlePokemon(from: $0) }
-
-        // Generate AI team
-        let opponentTeam = BattleAI.generateTeam(playerParty: playerInstances)
-
-        let engine = BattleEngine(playerTeam: playerTeam, opponentTeam: opponentTeam)
-        battleEngine = engine
-
-        engine.onBattleOver = { [weak self] winner in
-            if winner == .player {
-                self?.onBattleWon?()
-            }
-        }
-
-        if let battleTab = tabs.compactMap({ $0 as? BattleTabView }).first {
-            battleTab.startBattle(engine: engine)
-            // Switch to battle tab
-            let battleIndex = tabs.firstIndex(where: { $0 is BattleTabView }) ?? 0
-            switchToTab(battleIndex)
-        }
-    }
-
     // MARK: - Collection Overlay
 
     private func showCollection() {
