@@ -289,25 +289,8 @@ final class BattleTabView: DSTabView {
     private func buildPreBattle() {
         let w = bounds.width
 
-        // --- Friend Code Display ---
-        let playerId = Preferences.shared.playerId ?? ""
-        let myCode = SupabaseManager.friendCode(from: playerId)
-
-        let codeY: CGFloat = 14
-        let codeBg = NSView(frame: NSRect(x: (w - 200) / 2, y: codeY, width: 200, height: 28))
-        codeBg.wantsLayer = true
-        codeBg.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.8).cgColor
-        codeBg.layer?.cornerRadius = 6
-        addSubview(codeBg)
-
-        let codeLabel = DS.label("Your Code:  \(myCode)", size: 13, bold: true, color: DS.gold)
-        codeLabel.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
-        codeLabel.frame = codeBg.bounds
-        codeLabel.alignment = .center
-        codeBg.addSubview(codeLabel)
-
         // --- VS area with sprites ---
-        let vsY: CGFloat = codeY + 38
+        let vsY: CGFloat = 20
         let centerX = w / 2
 
         if let state = currentState, let leadId = state.party.first {
@@ -327,74 +310,19 @@ final class BattleTabView: DSTabView {
         qLabel.alignment = .center
         addSubview(qLabel)
 
-        // --- Battle Mode Buttons ---
+        // --- Battle Button ---
         let btnW: CGFloat = 200
-        let btnH: CGFloat = 36
+        let btnH: CGFloat = 40
         let btnX = (w - btnW) / 2
-        var btnY: CGFloat = vsY + 64
+        let btnY: CGFloat = vsY + 70
 
-        // Battle AI button
-        let aiBtn = makeBattleButton(label: "Battle AI", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
+        let aiBtn = makeBattleButton(label: "BATTLE!", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
         addSubview(aiBtn)
         addHitRegion(HitRegion(
             id: "startBattle",
             rect: NSRect(x: btnX, y: btnY, width: btnW, height: btnH),
             action: .startBattle
         ))
-        btnY += btnH + 8
-
-        // Find Match button
-        let matchBtn = makeBattleButton(label: "Find Match", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH))
-        addSubview(matchBtn)
-        addHitRegion(HitRegion(
-            id: "findMatch",
-            rect: NSRect(x: btnX, y: btnY, width: btnW, height: btnH),
-            action: .findOnlineMatch
-        ))
-        btnY += btnH + 16
-
-        // --- Challenge Friend Section ---
-        let sectionLabel = DS.label("Challenge a Friend", size: 11, bold: true, color: DS.textSecondary)
-        sectionLabel.frame = NSRect(x: 0, y: btnY, width: w, height: 16)
-        sectionLabel.alignment = .center
-        addSubview(sectionLabel)
-        btnY += 20
-
-        // Invite button (creates a waiting room)
-        let inviteBtnW: CGFloat = 200
-        let inviteBtn = makeSecondaryButton(label: "Invite (Share Your Code)", frame: NSRect(x: (w - inviteBtnW) / 2, y: btnY, width: inviteBtnW, height: 32))
-        addSubview(inviteBtn)
-        addHitRegion(HitRegion(
-            id: "createFriend",
-            rect: NSRect(x: (w - inviteBtnW) / 2, y: btnY, width: inviteBtnW, height: 32),
-            action: .createFriendBattle
-        ))
-        btnY += 40
-
-        // Friend code entry row: [text field] [Join]
-        let fieldW: CGFloat = 100
-        let joinBtnW: CGFloat = 60
-        let rowW = fieldW + 8 + joinBtnW
-        let rowX = (w - rowW) / 2
-
-        let codeField = NSTextField(frame: NSRect(x: rowX, y: btnY, width: fieldW, height: 26))
-        codeField.placeholderString = "Code"
-        codeField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
-        codeField.alignment = .center
-        codeField.bezelStyle = .roundedBezel
-        codeField.maximumNumberOfLines = 1
-        codeField.cell?.isScrollable = true
-        addSubview(codeField)
-        friendCodeField = codeField
-
-        let joinBtn = makeSecondaryButton(label: "Join", frame: NSRect(x: rowX + fieldW + 8, y: btnY, width: joinBtnW, height: 26))
-        addSubview(joinBtn)
-        addHitRegion(HitRegion(
-            id: "joinFriend",
-            rect: NSRect(x: rowX + fieldW + 8, y: btnY, width: joinBtnW, height: 26),
-            action: .joinFriendBattle(code: "") // code read from field at action time
-        ))
-        btnY += 36
 
         // --- Party sprites row ---
         if let state = currentState {

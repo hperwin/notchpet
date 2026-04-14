@@ -14,8 +14,6 @@ final class Preferences {
         static let hasLaunchedBefore = "notchpet.hasLaunchedBefore"
         static let berriesEnabled = "notchpet.berriesEnabled"
         static let appHidden = "notchpet.appHidden"
-        static let playerId = "notchpet.playerId"
-        static let playerName = "notchpet.playerName"
     }
 
     var savedWindowX: CGFloat? {
@@ -73,16 +71,6 @@ final class Preferences {
             return defaults.bool(forKey: Keys.berriesEnabled)
         }
         set { defaults.set(newValue, forKey: Keys.berriesEnabled) }
-    }
-
-    var playerId: String? {
-        get { defaults.string(forKey: Keys.playerId) }
-        set { defaults.set(newValue, forKey: Keys.playerId) }
-    }
-
-    var playerName: String {
-        get { defaults.string(forKey: Keys.playerName) ?? NSFullUserName().components(separatedBy: " ").first ?? "Trainer" }
-        set { defaults.set(newValue, forKey: Keys.playerName) }
     }
 
     private init() {}

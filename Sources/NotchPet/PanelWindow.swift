@@ -41,9 +41,6 @@ final class PanelWindow: NSWindow {
 
     // Battle system
     private var battleEngine: BattleEngine?
-    private var multiplayerBattle: MultiplayerBattle?
-    private var onlineSearchTask: Task<Void, Never>?
-    private var pendingFriendBattleId: String?
 
     // MARK: - Init
 
@@ -294,21 +291,8 @@ final class PanelWindow: NSWindow {
         case .showCollection:
             showCollection()
 
-        case .findOnlineMatch:
-            startOnlineMatch()
-
-        case .createFriendBattle:
-            createFriendBattle()
-
-        case .joinFriendBattle:
-            if let battleTab = battleTabIfPresent {
-                let code = battleTab.readFriendCode()
-                guard !code.isEmpty else { return }
-                joinFriendBattle(code: code)
-            }
-
-        case .cancelSearch:
-            cancelOnlineSearch()
+        case .findOnlineMatch, .createFriendBattle, .joinFriendBattle, .cancelSearch:
+            break // multiplayer disabled for now
         }
     }
 
@@ -466,187 +450,6 @@ final class PanelWindow: NSWindow {
     }
 
     // MARK: - Online Matchmaking
-
-    private func startOnlineMatch() {
-        guard let state = lastState else { return }
-        let party = state.party.compactMap { state.pokemonInstances[$0] }
-        guard !party.isEmpty else { return }
-
-        if let battleTab = battleTabIfPresent {
-            battleTab.showSearching(message: "Searching for opponent...")
-        }
-
-        onlineSearchTask = Task { [weak self] in
-            do {
-                let matchmaking = MatchmakingManager()
-                let player = try await matchmaking.ensurePlayer(party: party)
-                let match = try await matchmaking.findMatch(player: player, party: party)
-
-                await MainActor.run {
-                    self?.startMultiplayerBattle(match: match, party: party)
-                }
-            } catch {
-                await MainActor.run {
-                    self?.battleTabIfPresent?.showError("No opponent found. Try again!")
-                }
-            }
-        }
-    }
-
-    // MARK: - Friend Battles
-
-    private func createFriendBattle() {
-        guard let state = lastState else { return }
-        let party = state.party.compactMap { state.pokemonInstances[$0] }
-        guard !party.isEmpty else { return }
-
-        let playerId = Preferences.shared.playerId ?? ""
-        let myCode = SupabaseManager.friendCode(from: playerId)
-
-        if let battleTab = battleTabIfPresent {
-            battleTab.showWaitingForFriend(code: myCode)
-        }
-
-        onlineSearchTask = Task { [weak self] in
-            do {
-                let matchmaking = MatchmakingManager()
-                let player = try await matchmaking.ensurePlayer(party: party)
-                let battleId = try await matchmaking.createFriendBattle(player: player)
-
-                await MainActor.run {
-                    self?.pendingFriendBattleId = battleId
-                }
-
-                let match = try await matchmaking.waitForFriend(battleId: battleId)
-
-                await MainActor.run {
-                    self?.pendingFriendBattleId = nil
-                    self?.startMultiplayerBattle(match: match, party: party)
-                }
-            } catch is CancellationError {
-                // Cancelled by user — already cleaned up
-            } catch {
-                await MainActor.run {
-                    self?.pendingFriendBattleId = nil
-                    self?.battleTabIfPresent?.showError("No friend joined. Try again!")
-                }
-            }
-        }
-    }
-
-    private func joinFriendBattle(code: String) {
-        guard let state = lastState else { return }
-        let party = state.party.compactMap { state.pokemonInstances[$0] }
-        guard !party.isEmpty else { return }
-
-        if let battleTab = battleTabIfPresent {
-            battleTab.showSearching(message: "Joining friend's battle...")
-        }
-
-        onlineSearchTask = Task { [weak self] in
-            do {
-                let matchmaking = MatchmakingManager()
-                let player = try await matchmaking.ensurePlayer(party: party)
-                let match = try await matchmaking.joinFriendBattle(player: player, friendCode: code)
-
-                await MainActor.run {
-                    self?.startMultiplayerBattle(match: match, party: party)
-                }
-            } catch MatchmakingError.noOpponent {
-                await MainActor.run {
-                    self?.battleTabIfPresent?.showError("No battle found for that code.")
-                }
-            } catch {
-                await MainActor.run {
-                    self?.battleTabIfPresent?.showError("Could not join. Try again!")
-                }
-            }
-        }
-    }
-
-    private func startMultiplayerBattle(match: MatchFound, party: [PokemonInstance]) {
-        let playerTeam = party.map { BattlePokemon(from: $0) }
-
-        // Parse opponent party if available, otherwise generate AI stand-in
-        let opponentTeam: [BattlePokemon]
-        if !match.opponentParty.isEmpty,
-           let data = match.opponentParty.data(using: .utf8),
-           let entries = try? JSONDecoder().decode([PartySnapshotEntry].self, from: data) {
-            opponentTeam = entries.map { entry in
-                var instance = PokemonInstance(pokemonId: entry.pokemonId)
-                instance.level = entry.level
-                instance.moves = entry.moves
-                return BattlePokemon(from: instance)
-            }
-        } else {
-            opponentTeam = BattleAI.generateTeam(playerParty: party)
-        }
-
-        let engine = BattleEngine(playerTeam: playerTeam, opponentTeam: opponentTeam)
-        battleEngine = engine
-
-        let mp = MultiplayerBattle(battleId: match.battleId, isPlayer1: match.isPlayer1)
-        multiplayerBattle = mp
-
-        engine.onBattleOver = { [weak self] winner in
-            if winner == .player {
-                self?.onBattleWon?()
-            }
-            // Report result to Supabase
-            let winnerId = winner == .player
-                ? (Preferences.shared.playerId ?? "")
-                : match.opponentId
-            Task {
-                try? await mp.reportResult(winnerId: winnerId)
-                await mp.disconnect()
-            }
-        }
-
-        // Wire up multiplayer move sync
-        mp.onOpponentMoved = { [weak self] moveIndex in
-            // In multiplayer, opponent moves come from the network
-            if let battleTab = self?.battleTabIfPresent {
-                battleTab.executePlayerMove(index: moveIndex)
-            }
-        }
-
-        Task {
-            await mp.connect()
-        }
-
-        if let battleTab = battleTabIfPresent {
-            battleTab.startBattle(engine: engine)
-            let battleIndex = tabs.firstIndex(where: { $0 is BattleTabView }) ?? 0
-            switchToTab(battleIndex)
-        }
-    }
-
-    private func cancelOnlineSearch() {
-        onlineSearchTask?.cancel()
-        onlineSearchTask = nil
-
-        // Clean up pending friend battle if any
-        if let battleId = pendingFriendBattleId {
-            pendingFriendBattleId = nil
-            Task {
-                let matchmaking = MatchmakingManager()
-                try? await matchmaking.cancelFriendBattle(battleId: battleId)
-            }
-        }
-
-        // Cancel matchmaking queue entry
-        if let playerId = Preferences.shared.playerId {
-            Task {
-                let matchmaking = MatchmakingManager()
-                try? await matchmaking.cancelSearch(playerId: playerId)
-            }
-        }
-
-        // Return to pre-battle screen
-        if let battleTab = battleTabIfPresent {
-            battleTab.endBattle()
-        }
-    }
 
     // MARK: - Detail Navigation
 

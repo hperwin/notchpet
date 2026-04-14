@@ -4,15 +4,9 @@ import PackageDescription
 let package = Package(
     name: "NotchPet",
     platforms: [.macOS(.v14)],
-    dependencies: [
-        .package(url: "https://github.com/supabase/supabase-swift", from: "2.0.0"),
-    ],
     targets: [
         .executableTarget(
             name: "NotchPet",
-            dependencies: [
-                .product(name: "Supabase", package: "supabase-swift"),
-            ],
             resources: [
                 .copy("Resources/blob.png"),
                 .copy("Resources/frames"),
