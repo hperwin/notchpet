@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: OnboardingWindow?
     private var statusItem: NSStatusItem?
     private var updateChecker: UpdateChecker?
+    private var friendsManager: FriendsManager?
+    private var giftSpawner: GiftSpawner?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility before doing anything else
@@ -101,6 +103,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if enabled { self.foodSpawner.start() }
             else { self.foodSpawner.stop() }
         }
+        // Friends system
+        let fm = FriendsManager()
+        friendsManager = fm
+
+        panelWindow.onAddFriend = { [weak self] code in
+            Task {
+                do {
+                    try await fm.ensurePlayer()
+                    try await fm.sendFriendRequest(toCode: code)
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Request sent!") }
+                } catch {
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed to send request") }
+                }
+            }
+        }
+        panelWindow.onSendGift = { [weak self] friendId in
+            Task {
+                do {
+                    try await fm.sendGift(toFriendId: friendId)
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Gift sent! 🎁") }
+                } catch {
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed to send gift") }
+                }
+            }
+        }
+        panelWindow.onAcceptRequest = { [weak self] requestId in
+            Task {
+                do {
+                    let requests = try await fm.checkIncomingRequests()
+                    if let req = requests.first(where: { $0.id == requestId }) {
+                        try await fm.acceptRequest(req)
+                        await MainActor.run {
+                            self?.panelWindow.friendsTabIfPresent?.showMessage("Friend added!")
+                            self?.refreshFriendsData()
+                        }
+                    }
+                } catch {
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed to accept") }
+                }
+            }
+        }
+        panelWindow.onRefreshFriends = { [weak self] in
+            self?.refreshFriendsData()
+        }
+
+        // Gift spawner
+        let gs = GiftSpawner()
+        giftSpawner = gs
+        gs.onGiftOpened = { [weak self] giftId, treats in
+            guard let self = self else { return }
+            // Feed berries to lead Pokemon
+            for treat in treats {
+                self.handleFoodEaten(treat)
+            }
+            // Mark gift as opened
+            Task { try? await fm.openGift(giftId) }
+        }
+
+        // Initial friends data load + ensure player registered
+        Task {
+            try? await fm.ensurePlayer()
+            await MainActor.run { self.refreshFriendsData() }
+        }
+
         panelWindow.refreshData(petState)
 
         // Interaction handler
@@ -400,6 +466,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updatePartyStrip() {
         // Show ALL party members in the strip — no separate "lead" pet
         partyStrip.updateParty(petState.party, level: petState.highestLevel)
+    }
+
+    // MARK: - Friends
+
+    private func refreshFriendsData() {
+        guard let fm = friendsManager else { return }
+        guard let myId = Preferences.shared.playerId else { return }
+        let myCode = SupabaseManager.friendCode(from: myId)
+
+        panelWindow.friendsTabIfPresent?.setFriendCode(myCode)
+
+        Task {
+            // Load friends
+            let friends = (try? await fm.loadFriends()) ?? []
+            await MainActor.run {
+                self.panelWindow.friendsTabIfPresent?.setFriends(
+                    friends.map { (id: $0.playerId, name: $0.displayName, code: $0.friendCode) }
+                )
+            }
+
+            // Check pending requests
+            let requests = (try? await fm.checkIncomingRequests()) ?? []
+            await MainActor.run {
+                self.panelWindow.friendsTabIfPresent?.setPendingRequests(
+                    requests.map { (id: $0.id, fromName: $0.fromName) }
+                )
+            }
+
+            // Check for gifts
+            let gifts = (try? await fm.checkGifts()) ?? []
+            for gift in gifts {
+                let treats = (try? JSONDecoder().decode([String].self, from: Data(gift.treats.utf8))) ?? []
+                await MainActor.run {
+                    self.giftSpawner?.spawnGift(giftId: gift.id, fromName: gift.fromName, treats: treats)
+                }
+            }
+        }
     }
 
     // MARK: - Helpers
