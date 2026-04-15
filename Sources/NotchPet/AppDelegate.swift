@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panelRefreshTimer: Timer?
     private var onboardingWindow: OnboardingWindow?
     private var statusItem: NSStatusItem?
+    private var updateChecker: UpdateChecker?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility before doing anything else
@@ -230,6 +231,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: .init("notchpet.showApp"), object: nil, queue: .main) { [weak self] _ in
             self?.showApp()
         }
+
+        // Check for updates
+        updateChecker = UpdateChecker()
+        updateChecker?.onUpdateAvailable = { [weak self] newVersion in
+            self?.showUpdateBanner(newVersion: newVersion)
+        }
+        updateChecker?.checkForUpdate()
     }
 
     // MARK: - Lead Pokemon
@@ -427,6 +435,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showApp()
         } else {
             hideApp()
+        }
+    }
+
+    // MARK: - Update Banner
+
+    private func showUpdateBanner(newVersion: String) {
+        guard let screen = NSScreen.main else { return }
+
+        let bannerW: CGFloat = 260
+        let bannerH: CGFloat = 36
+        let menuBarH = screen.auxiliaryTopLeftArea?.height ?? 32
+        let x = screen.frame.midX - bannerW / 2
+        let y = screen.frame.maxY - menuBarH - bannerH - 8
+
+        let window = NSWindow(
+            contentRect: NSRect(x: x, y: y, width: bannerW, height: bannerH),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.level = .statusBar + 1
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.hasShadow = true
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        window.ignoresMouseEvents = false
+
+        let bg = NSView(frame: NSRect(origin: .zero, size: NSSize(width: bannerW, height: bannerH)))
+        bg.wantsLayer = true
+        bg.layer?.cornerRadius = 10
+        bg.layer?.backgroundColor = NSColor(red: 0.15, green: 0.15, blue: 0.2, alpha: 0.95).cgColor
+        bg.layer?.borderColor = DS.gold.cgColor
+        bg.layer?.borderWidth = 1
+
+        let label = DS.label("Update v\(newVersion) available!", size: 12, bold: true, color: DS.gold)
+        label.translatesAutoresizingMaskIntoConstraints = true
+        label.alignment = .center
+        label.frame = NSRect(x: 0, y: 0, width: bannerW, height: bannerH)
+        bg.addSubview(label)
+
+        window.contentView = bg
+        window.alphaValue = 0
+        window.orderFront(nil)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            window.animator().alphaValue = 1
+        }
+
+        // Auto-dismiss after 8 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.5
+                window.animator().alphaValue = 0
+            }, completionHandler: {
+                window.orderOut(nil)
+            })
         }
     }
 
