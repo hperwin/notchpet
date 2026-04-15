@@ -37,10 +37,19 @@ final class FriendsTabView: DSTabView {
 
     // Let the text field receive clicks for typing
     override func hitTest(_ point: NSPoint) -> NSView? {
+        // The text field is nested inside a section container, so we need to
+        // walk the view hierarchy to find it
         if let field = codeInputField {
-            let fieldPoint = field.convert(point, from: self)
-            if field.bounds.contains(fieldPoint) {
-                return field
+            // Convert point from self to the field's coordinate space
+            // field is inside addSection which is inside self
+            if let fieldSuper = field.superview {
+                let inParent = fieldSuper.convert(point, from: self)
+                let inField = field.convert(inParent, from: fieldSuper)
+                if field.bounds.contains(inField) {
+                    // Make the field first responder so it accepts typing
+                    window?.makeFirstResponder(field)
+                    return field
+                }
             }
         }
         return super.hitTest(point)
@@ -89,6 +98,8 @@ final class FriendsTabView: DSTabView {
     // MARK: - Rebuild
 
     private func rebuildUI() {
+        // Preserve text field content across rebuilds
+        let savedText = codeInputField?.stringValue ?? ""
         subviews.forEach { $0.removeFromSuperview() }
         layer?.sublayers?.removeAll(where: { $0.name == "friendsBgGrad" })
         clearHitRegions()
@@ -173,6 +184,7 @@ final class FriendsTabView: DSTabView {
         field.focusRingType = .none
         addSection.addSubview(field)
         codeInputField = field
+        field.stringValue = savedText
 
         // "Add" button
         let btnW: CGFloat = 60
