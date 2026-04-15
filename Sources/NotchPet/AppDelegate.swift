@@ -99,14 +99,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelWindow.onAddFriend = { [weak self] code in
             NSLog("NotchPet: Adding friend with code: '\(code)'")
             Task {
-                do {
-                    try await fm.ensurePlayer(state: self?.petState)
-                    try await fm.sendFriendRequest(toCode: code)
-                    NSLog("NotchPet: Friend request sent successfully to code: \(code)")
-                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Request sent!") }
-                } catch {
-                    NSLog("NotchPet: Failed to send friend request: \(error)")
-                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed: \(error.localizedDescription)") }
+                // Retry once on failure
+                for attempt in 1...2 {
+                    do {
+                        try await fm.ensurePlayer(state: self?.petState)
+                        try await fm.sendFriendRequest(toCode: code)
+                        NSLog("NotchPet: Friend request sent to \(code)")
+                        await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Request sent to \(code)!") }
+                        return
+                    } catch {
+                        NSLog("NotchPet: Attempt \(attempt) failed: \(error)")
+                        if attempt == 2 {
+                            await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed — check code and try again") }
+                        } else {
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        }
+                    }
                 }
             }
         }
@@ -157,6 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             try? await fm.ensurePlayer(state: self.petState)
             await MainActor.run { self.refreshFriendsData() }
+        }
+
+        // Poll for friend requests and gifts every 30 seconds
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            self?.refreshFriendsData()
         }
 
         panelWindow.refreshData(petState)
