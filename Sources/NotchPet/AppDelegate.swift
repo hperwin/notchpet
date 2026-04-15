@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Initial friends data load + ensure player registered
         Task {
-            try? await fm.ensurePlayer()
+            try? await fm.ensurePlayer(state: self.petState)
             await MainActor.run { self.refreshFriendsData() }
         }
 

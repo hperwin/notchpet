@@ -16,11 +16,21 @@ struct PlayerUpsert: Encodable {
     let id: String
     let displayName: String
     let lastActive: String
+    let partySnapshot: String
     enum CodingKeys: String, CodingKey {
         case id
         case displayName = "display_name"
         case lastActive = "last_active"
+        case partySnapshot = "party_snapshot"
     }
+}
+
+struct PartySnapshotEntry: Codable {
+    let pokemonId: String
+    let level: Int
+    let moves: [String]
+    let xp: Int
+    let foodEaten: Int
 }
 
 struct FriendRecord: Codable {
@@ -120,17 +130,30 @@ final class FriendsManager {
     private let supabase = SupabaseManager.shared
 
     /// Ensure local player exists in Supabase
-    func ensurePlayer() async throws -> PlayerRecord {
+    func ensurePlayer(state: PetState? = nil) async throws -> PlayerRecord {
         let id = Preferences.shared.playerId ?? UUID().uuidString
         Preferences.shared.playerId = id
         let name = Preferences.shared.playerName
+
+        // Backup party data to Supabase
+        var partyJSON = "[]"
+        if let state = state {
+            let entries = state.party.compactMap { pokemonId -> PartySnapshotEntry? in
+                guard let inst = state.pokemonInstances[pokemonId] else { return nil }
+                return PartySnapshotEntry(pokemonId: pokemonId, level: inst.level, moves: inst.moves, xp: inst.xp, foodEaten: inst.foodEaten)
+            }
+            if let data = try? JSONEncoder().encode(entries) {
+                partyJSON = String(data: data, encoding: .utf8) ?? "[]"
+            }
+        }
 
         let results: [PlayerRecord] = try await supabase.client
             .from("players")
             .upsert(PlayerUpsert(
                 id: id,
                 displayName: name,
-                lastActive: ISO8601DateFormatter().string(from: Date())
+                lastActive: ISO8601DateFormatter().string(from: Date()),
+                partySnapshot: partyJSON
             ))
             .select()
             .execute()

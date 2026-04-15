@@ -203,8 +203,9 @@ final class PanelWindow: NSWindow {
         let collection = CollectionTabView()
         let friends = FriendsTabView()
         let profile = ProfileTabView()
+        let appSettings = AppSettingsTabView()
 
-        tabs = [party, collection, friends, profile]
+        tabs = [party, collection, friends, profile, appSettings]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -381,7 +382,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Friends", "Profile"]
+        let labels = ["Party", "Box", "Friends", "Profile", "Apps"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in

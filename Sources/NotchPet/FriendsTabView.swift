@@ -35,6 +35,17 @@ final class FriendsTabView: DSTabView {
 
     override var disableHoverTracking: Bool { true }
 
+    // Let the text field receive clicks for typing
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let field = codeInputField {
+            let fieldPoint = field.convert(point, from: self)
+            if field.bounds.contains(fieldPoint) {
+                return field
+            }
+        }
+        return super.hitTest(point)
+    }
+
     override func layout() {
         super.layout()
         if let grad = layer?.sublayers?.first(where: { $0.name == "friendsBgGrad" }) as? CAGradientLayer {
