@@ -37,23 +37,28 @@ final class FriendsTabView: DSTabView {
 
     // Let nested controls (text field, buttons) receive their own events
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // Check all subviews recursively — NSButtons and NSTextFields inside
-        // section containers need to receive their own clicks
-        for section in subviews {
-            let sectionPoint = section.convert(point, from: self)
-            if section.bounds.contains(sectionPoint) {
-                for child in section.subviews {
-                    let childPoint = child.convert(sectionPoint, from: section)
-                    if child.bounds.contains(childPoint) {
-                        if child is NSTextField || child is NSButton {
-                            if child is NSTextField {
-                                window?.makeFirstResponder(child)
-                            }
-                            return child
-                        }
+        // Recursively find any NSButton or NSTextField under the click point
+        func findControl(in view: NSView, point: NSPoint) -> NSView? {
+            for child in view.subviews.reversed() {
+                let childPoint = child.convert(point, from: view)
+                if child.bounds.contains(childPoint) {
+                    if child is NSButton {
+                        return child
+                    }
+                    if child is NSTextField && (child as! NSTextField).isEditable {
+                        window?.makeFirstResponder(child)
+                        return child
+                    }
+                    // Recurse into containers (sections, scroll views, doc views)
+                    if let found = findControl(in: child, point: childPoint) {
+                        return found
                     }
                 }
             }
+            return nil
+        }
+        if let control = findControl(in: self, point: point) {
+            return control
         }
         return super.hitTest(point)
     }
@@ -308,44 +313,18 @@ final class FriendsTabView: DSTabView {
                 codeDisplay.frame = NSRect(x: 10, y: rowY + 22, width: rowW - 110, height: 14)
                 docView.addSubview(codeDisplay)
 
-                // Send Gift button
+                // Send Gift button — real NSButton
                 let giftW: CGFloat = 90
                 let giftH: CGFloat = 24
                 let giftX = rowW - giftW - 10
                 let giftY = rowY + (rowH - giftH) / 2
 
-                let giftBtn = NSView(frame: NSRect(x: giftX, y: giftY, width: giftW, height: giftH))
-                giftBtn.wantsLayer = true
-                giftBtn.layer?.cornerRadius = 6
-
-                let giftGrad = CAGradientLayer()
-                giftGrad.frame = CGRect(origin: .zero, size: CGSize(width: giftW, height: giftH))
-                giftGrad.colors = [DS.cardGreenTop.cgColor, DS.cardGreenBot.cgColor]
-                giftGrad.startPoint = CGPoint(x: 0.5, y: 0)
-                giftGrad.endPoint = CGPoint(x: 0.5, y: 1)
-                giftGrad.cornerRadius = 6
-                giftBtn.layer?.addSublayer(giftGrad)
-
-                let giftLabel = DS.label("Send Gift", size: 10, bold: true)
-                giftLabel.translatesAutoresizingMaskIntoConstraints = true
-                giftLabel.alignment = .center
-                giftLabel.frame = NSRect(x: 0, y: 3, width: giftW, height: 18)
-                giftBtn.addSubview(giftLabel)
+                let giftBtn = NSButton(title: "Send Gift 🎁", target: self, action: #selector(sendGiftTapped(_:)))
+                giftBtn.frame = NSRect(x: giftX, y: giftY, width: giftW, height: giftH)
+                giftBtn.bezelStyle = .rounded
+                giftBtn.font = NSFont.boldSystemFont(ofSize: 10)
+                giftBtn.tag = i  // store friend index
                 docView.addSubview(giftBtn)
-
-                // Hit region for gift button (in parent view coordinates)
-                // We need the offset from the scroll view's position in the parent
-                let giftInParent = NSRect(
-                    x: pad + 4 + giftX,
-                    y: cursorY + scrollAreaY + giftY - (scroll.contentView.bounds.origin.y),
-                    width: giftW,
-                    height: giftH
-                )
-                addHitRegion(HitRegion(
-                    id: "gift_\(friend.id)",
-                    rect: giftInParent,
-                    action: .sendGift(friendId: friend.id)
-                ))
             }
 
             scroll.documentView = docView
@@ -406,6 +385,14 @@ final class FriendsTabView: DSTabView {
         NSLog("NotchPet: Add friend tapped with code: '\(code)'")
         onAction?(.addFriend(code: code))
         codeInputField?.stringValue = ""
+    }
+
+    @objc private func sendGiftTapped(_ sender: NSButton) {
+        let idx = sender.tag
+        guard idx >= 0 && idx < friends.count else { return }
+        let friendId = friends[idx].id
+        NSLog("NotchPet: Send gift tapped for friend: \(friends[idx].name)")
+        onAction?(.sendGift(friendId: friendId))
     }
 
     // MARK: - Helpers
