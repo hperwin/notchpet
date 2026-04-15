@@ -65,6 +65,10 @@ final class PanelWindow: NSWindow {
         setupTabs()
     }
 
+    // Borderless windows must override these to accept keyboard input (for text fields)
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
     // MARK: - Toggle
 
     func toggle(from anchorFrame: NSRect) {
