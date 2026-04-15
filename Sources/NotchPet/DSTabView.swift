@@ -12,6 +12,10 @@ enum TabAction {
     case cycleTier(bundleID: String)
     case toggleBerries
     case showCollection
+    case addFriend(code: String)
+    case sendGift(friendId: String)
+    case acceptFriendRequest(requestId: String)
+    case refreshFriends
 }
 
 // MARK: - DS Tab Protocol

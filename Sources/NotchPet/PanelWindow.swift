@@ -10,6 +10,12 @@ final class PanelWindow: NSWindow {
     var onPartyChanged: (([String]) -> Void)?
     var onBerriesToggled: ((Bool) -> Void)?
 
+    // Friends callbacks (wired by AppDelegate to FriendsManager)
+    var onAddFriend: ((String) -> Void)?      // friend code
+    var onSendGift: ((String) -> Void)?       // friend ID
+    var onAcceptRequest: ((String) -> Void)?  // request ID
+    var onRefreshFriends: (() -> Void)?
+
     // Layout constants
     private let panelWidth: CGFloat = 580
     private let panelMaxHeight: CGFloat = 500
@@ -33,7 +39,7 @@ final class PanelWindow: NSWindow {
     private var globalMonitor: Any?
 
     // Tab titles
-    private static let tabTitles = ["Party", "Battle", "Profile"]
+    private static let tabTitles = ["Party", "Box", "Friends", "Profile"]
 
     // Collection overlay (not a tab — shown via "See All")
     private var collectionOverlay: CollectionTabView?
@@ -195,9 +201,10 @@ final class PanelWindow: NSWindow {
     private func setupTabs() {
         let party = PartyTabView()
         let collection = CollectionTabView()
+        let friends = FriendsTabView()
         let profile = ProfileTabView()
 
-        tabs = [party, collection, profile]
+        tabs = [party, collection, friends, profile]
 
         for tab in tabs {
             tab.onAction = { [weak self] action in
@@ -278,7 +285,24 @@ final class PanelWindow: NSWindow {
 
         case .showCollection:
             showCollection()
+
+        case .addFriend(let code):
+            onAddFriend?(code)
+
+        case .sendGift(let friendId):
+            onSendGift?(friendId)
+
+        case .acceptFriendRequest(let requestId):
+            onAcceptRequest?(requestId)
+
+        case .refreshFriends:
+            onRefreshFriends?()
         }
+    }
+
+    /// Access the Friends tab for external data updates.
+    var friendsTabIfPresent: FriendsTabView? {
+        tabs.compactMap { $0 as? FriendsTabView }.first
     }
 
     // MARK: - Tab Switching
@@ -357,7 +381,7 @@ final class PanelWindow: NSWindow {
             stack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
         ])
 
-        let labels = ["Party", "Box", "Profile"]
+        let labels = ["Party", "Box", "Friends", "Profile"]
         tabButtons.removeAll()
         for (index, title) in labels.enumerated() {
             let btn = RetroNavButton(label: title, index: index) { [weak self] idx in
