@@ -108,13 +108,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         friendsManager = fm
 
         panelWindow.onAddFriend = { [weak self] code in
+            NSLog("NotchPet: Adding friend with code: '\(code)'")
             Task {
                 do {
-                    try await fm.ensurePlayer()
+                    try await fm.ensurePlayer(state: self?.petState)
                     try await fm.sendFriendRequest(toCode: code)
+                    NSLog("NotchPet: Friend request sent successfully to code: \(code)")
                     await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Request sent!") }
                 } catch {
-                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed to send request") }
+                    NSLog("NotchPet: Failed to send friend request: \(error)")
+                    await MainActor.run { self?.panelWindow.friendsTabIfPresent?.showMessage("Failed: \(error.localizedDescription)") }
                 }
             }
         }

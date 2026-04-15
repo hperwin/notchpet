@@ -35,20 +35,23 @@ final class FriendsTabView: DSTabView {
 
     override var disableHoverTracking: Bool { true }
 
-    // Let the text field receive clicks for typing
+    // Let nested controls (text field, buttons) receive their own events
     override func hitTest(_ point: NSPoint) -> NSView? {
-        // The text field is nested inside a section container, so we need to
-        // walk the view hierarchy to find it
-        if let field = codeInputField {
-            // Convert point from self to the field's coordinate space
-            // field is inside addSection which is inside self
-            if let fieldSuper = field.superview {
-                let inParent = fieldSuper.convert(point, from: self)
-                let inField = field.convert(inParent, from: fieldSuper)
-                if field.bounds.contains(inField) {
-                    // Make the field first responder so it accepts typing
-                    window?.makeFirstResponder(field)
-                    return field
+        // Check all subviews recursively — NSButtons and NSTextFields inside
+        // section containers need to receive their own clicks
+        for section in subviews {
+            let sectionPoint = section.convert(point, from: self)
+            if section.bounds.contains(sectionPoint) {
+                for child in section.subviews {
+                    let childPoint = child.convert(sectionPoint, from: section)
+                    if child.bounds.contains(childPoint) {
+                        if child is NSTextField || child is NSButton {
+                            if child is NSTextField {
+                                window?.makeFirstResponder(child)
+                            }
+                            return child
+                        }
+                    }
                 }
             }
         }
@@ -186,26 +189,16 @@ final class FriendsTabView: DSTabView {
         codeInputField = field
         field.stringValue = savedText
 
-        // "Add" button
+        // "Add" button — real NSButton so it works with key window
         let btnW: CGFloat = 60
         let btnH: CGFloat = 24
         let btnX = fieldX + fieldW + 8
         let btnY = fieldY
-        let addBtn = makeButton(label: "Add", frame: NSRect(x: btnX, y: btnY, width: btnW, height: btnH), in: addSection)
+        let addBtn = NSButton(title: "Add", target: self, action: #selector(addFriendTapped))
+        addBtn.frame = NSRect(x: btnX, y: btnY, width: btnW, height: btnH)
+        addBtn.bezelStyle = .rounded
+        addBtn.font = NSFont.boldSystemFont(ofSize: 11)
         addSection.addSubview(addBtn)
-
-        // Hit region for Add button (in parent view coordinates)
-        let addBtnInParent = NSRect(
-            x: pad + btnX,
-            y: cursorY + btnY,
-            width: btnW,
-            height: btnH
-        )
-        addHitRegion(HitRegion(
-            id: "add_friend",
-            rect: addBtnInParent,
-            action: .addFriend(code: "")  // placeholder -- actual code read in mouseDown override
-        ))
 
         cursorY += addSectionH + DS.cardGap
 
@@ -403,6 +396,16 @@ final class FriendsTabView: DSTabView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             flash.removeFromSuperlayer()
         }
+    }
+
+    // MARK: - Actions
+
+    @objc private func addFriendTapped() {
+        let code = codeInputField?.stringValue.trimmingCharacters(in: .whitespaces) ?? ""
+        guard !code.isEmpty else { return }
+        NSLog("NotchPet: Add friend tapped with code: '\(code)'")
+        onAction?(.addFriend(code: code))
+        codeInputField?.stringValue = ""
     }
 
     // MARK: - Helpers
